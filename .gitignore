@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+data/faiss/
+data/uploads/*
+!data/uploads/.gitkeep
+*.db
+*.db-shm
+*.db-wal
+.venv/
+.pytest_cache/
