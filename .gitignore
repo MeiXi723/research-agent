@@ -9,3 +9,5 @@ data/uploads/*
 *.db-wal
 .venv/
 .pytest_cache/
+.coverage
+CLAUDE.md

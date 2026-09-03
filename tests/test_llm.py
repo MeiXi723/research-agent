@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 from app.services.llm import LLMService
 
 
-@patch("app.services.llm.TextEmbedding")
+@patch("fastembed.TextEmbedding")
 @patch("app.services.llm.OpenAI")
 def test_embed(mock_openai, mock_embedding):
     mock_embed_model = MagicMock()
@@ -17,7 +17,7 @@ def test_embed(mock_openai, mock_embedding):
     assert len(result) == 3
 
 
-@patch("app.services.llm.TextEmbedding")
+@patch("fastembed.TextEmbedding")
 @patch("app.services.llm.OpenAI")
 def test_chat(mock_openai, mock_embedding):
     mock_client = MagicMock()

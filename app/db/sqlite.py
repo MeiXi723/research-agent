@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -51,6 +52,12 @@ class Database:
                 value TEXT NOT NULL,
                 source_conversation_id TEXT,
                 created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS conversation_messages (
+                conversation_id TEXT PRIMARY KEY,
+                messages_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             );
         """)
 
@@ -152,3 +159,23 @@ class Database:
     def delete_memory(self, memory_id: int):
         self.conn.execute("DELETE FROM memories WHERE id=?", (memory_id,))
         self.conn.commit()
+
+    # ── conversation messages ──
+
+    def save_conversation_messages(self, conv_id: str, messages: list[dict]):
+        self.conn.execute(
+            "INSERT INTO conversation_messages (conversation_id, messages_json, updated_at) "
+            "VALUES (?,?,?) "
+            "ON CONFLICT(conversation_id) DO UPDATE SET messages_json=excluded.messages_json, updated_at=excluded.updated_at",
+            (conv_id, json.dumps(messages, ensure_ascii=False), _now())
+        )
+        self.conn.commit()
+
+    def get_conversation_messages(self, conv_id: str) -> list[dict]:
+        cur = self.conn.execute(
+            "SELECT messages_json FROM conversation_messages WHERE conversation_id=?", (conv_id,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return []
+        return json.loads(row["messages_json"])
