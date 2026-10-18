@@ -11,3 +11,6 @@ data/uploads/*
 .pytest_cache/
 .coverage
 CLAUDE.md
+
+# ZCode workspace-local config (MCP servers etc.)
+.zcode/
