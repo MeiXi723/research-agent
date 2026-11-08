@@ -75,10 +75,13 @@ class _StubHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
         payload = json.loads(body)
-        # 校验 OpenAI 兼容视觉消息形状
         content = payload["messages"][0]["content"]
-        assert any(c.get("type") == "image_url" for c in content)
-        assert any(c["image_url"]["url"].startswith("data:image/png;base64,") for c in content)
+        # 视觉请求：content 是分段 list，校验 OpenAI 兼容的图片形状。
+        # 主 LLM 的普通 chat 请求：content 是纯字符串，直接放行并返回同一份内容。
+        # 后者必须放行，否则 /ask 会去打真实接口 —— CI 里没有有效 key 就是 401。
+        if isinstance(content, list):
+            assert any(c.get("type") == "image_url" for c in content)
+            assert any(c["image_url"]["url"].startswith("data:image/png;base64,") for c in content)
         resp = json.dumps(STUB_RESPONSE).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -124,7 +127,17 @@ def vision_app():
     server.shutdown()
 
 
-def test_image_upload_to_retrieval_full_chain(vision_app):
+def test_image_upload_to_retrieval_full_chain(vision_app, monkeypatch):
+    # 这个用例验的是「图片描述能入库并被检索召回」，不是验 LLM。
+    # /ask 会调主 LLM，CI 里没有有效 key 会 401，所以把回答方法 stub 掉。
+    import app.main as app_main
+    monkeypatch.setattr(
+        app_main._llm_service,
+        "chat",
+        lambda messages: "图中是一张系统参数表：最大步数 99 步，专线端口 4242。",
+        raising=False,
+    )
+
     # 1. 上传图片 → 视觉专线描述 → 入库
     up = vision_app.post(
         "/documents/upload",
