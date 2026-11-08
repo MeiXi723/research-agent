@@ -60,3 +60,38 @@ make pull-evals  # 拉取 HotpotQA/2Wiki/MuSiQue（hf-mirror，opt-in）
 - [ ] AI_MOCK 录制回放纳入 CI（首次真跑后 `data/ai_mock/recordings.jsonl` 入库脱敏版）
 - [ ] MCP servers SSE/HTTP 传输
 - [ ] 记忆写入策略（agent 自动沉淀结论，当前仅手动 remember）
+
+## v2.0 观测层与路由漏斗（后续增补）
+
+### 三层漏斗意图路由（`/ask` 统一入口）
+
+```
+问题 ─► L1 规则/正则（零成本） ─► L2 语义识别（热门话题样本库向量匹配） ─► L3 LLM JSON 分类 ─► 兜底 tool_research
+```
+
+- 每层命中即出漏斗，`route`/`route_via`/`layer` 字段全量可观测
+- 样本库 `evals/intent_samples.json`（67 条），评测集 `evals/router_set.json` 刻意全用库外改写问法
+- **覆盖契约实测达标**：`python evals/run_eval.py --mode router` → accuracy 1.0，L1+L2 覆盖 100%（目标 ≥90%）
+- `force_route` 参数可绕过路由强制指定模式
+
+### 运行级指标（AskResponse.metrics + GET /stats/{id}）
+
+- **真实 token 用量**：捕获 OpenAI `resp.usage`（v1 是字符数冒充）；tiktoken cl100k_base 真计数驱动上下文预算
+- **工具调用分析**：每工具 调用次数/成功/失败，成功率聚合（每请求 + 会话级）
+- **上下文压缩事件**：压了几条消息、前后 token 数，全程可观测
+
+### DIY 多智能体流水线（不再焊死三角色）
+
+`pipelines/` 目录每个 JSON 声明一条流水线，任意数量角色任意编排：
+
+```bash
+GET  /api/pipelines                    # 列出全部已注册流水线
+POST /api/pipelines/diy_example/run    # 跑自定义链
+POST /api/research/full                # 默认三角色研究流水线（= pipelines/research.json）
+```
+
+配置字段：`engine`（research=专用图 / chain=通用线性链）、`roles[]`（name/system_prompt/tools 白名单/output_fields/route 回跳规则）。`route` 声明 `{pass_field, pass_value, revise_to, max_loops}` 即可让审核节点把不合格结果打回任意上游节点循环。`pipelines/diy_example.json` 是四角色示例（planner→searcher→analyst→reviewer 带回跳环）。
+
+### 已知环境自愈
+
+- fastembed 0.4.1 缓存默认在 `%TEMP%/fastembed_cache` 且国内无法在线下载——`llm.py` 启动时自动从 HF 缓存迁移模型（一次性），无需手工操作

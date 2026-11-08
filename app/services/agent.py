@@ -5,6 +5,7 @@ from app.config import MAX_AGENT_STEPS, MAX_CONTEXT_TOKENS, WINDOW_TURNS
 from app.models.schemas import AgentStep, SourceInfo
 from app.services.context import estimate_tokens, manage_context
 from app.services.llm import _llm_service
+from app.services.metrics import new_metrics, record_tool, record_usage
 from app.services.tracer import Tracer
 from app.tools.base import BaseTool
 from app.tools.calculator import CalculatorTool
@@ -96,6 +97,7 @@ def run_agent(
     max_steps: int | None = None,
     history: list[dict] | None = None,
     tracer: Tracer | None = None,
+    metrics_sink: dict | None = None,
 ) -> tuple[str, list[AgentStep], list[SourceInfo]]:
     if max_steps is None:
         max_steps = MAX_AGENT_STEPS
@@ -110,20 +112,34 @@ def run_agent(
 
     steps: list[AgentStep] = []
     sources: list[SourceInfo] = []
+    metrics = new_metrics()
+    context_events: list[dict] = []
+
+    def _flush():
+        if metrics_sink is not None:
+            metrics["context_events"] = context_events
+            metrics["steps"] = len(steps)
+            metrics_sink.update(metrics)
 
     start_time = time.time()
 
     for step_idx in range(max_steps):
         if time.time() - start_time > 120:
+            metrics["timeout"] = True
+            _flush()
             return "思考超时，请简化问题后重试", steps, sources
 
-        messages = manage_context(messages, MAX_CONTEXT_TOKENS, WINDOW_TURNS, _summarize)
+        messages = manage_context(
+            messages, MAX_CONTEXT_TOKENS, WINDOW_TURNS, _summarize, events=context_events
+        )
 
         msg = _llm_service.chat_with_tools(messages, tools_schema)
+        record_usage(metrics, getattr(_llm_service, "last_usage", None))
 
         if not msg.tool_calls:
             answer = msg.content or "无法生成回答"
             _log_step(tracer, step_idx + 1, "answer", estimate_tokens(messages), 0, True)
+            _flush()
             return answer, steps, sources
 
         tool_results: dict[str, str] = {}
@@ -148,6 +164,8 @@ def run_agent(
                     except Exception as e:
                         result_obj = {"error": str(e)}
             duration_ms = (time.time() - step_start) * 1000
+            ok = not isinstance(result_obj, dict) or "error" not in result_obj
+            record_tool(metrics, tool_name, ok)
 
             result_str = json.dumps(result_obj, ensure_ascii=False)[:500] if result_obj is not None else None
             tool_results[tc.id] = result_str or "工具执行失败"
@@ -180,4 +198,6 @@ def run_agent(
                 "content": tool_results[tc.id],
             })
 
+    metrics["max_steps_reached"] = True
+    _flush()
     return "达到最大步数限制，请简化问题", steps, sources

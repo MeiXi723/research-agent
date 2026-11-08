@@ -6,6 +6,7 @@ LangGraph 只做：State 生命周期、节点注册、边与条件路由执行�
 本文件是 LangGraph 责任边界，务必只写调度，不写业务。
 """
 
+import json
 import operator
 from typing import Annotated, TypedDict
 
@@ -18,6 +19,9 @@ from app.multi_agent import (
     DEFAULT_SUB_QUESTION_MAX,
     DEFAULT_SUB_QUESTION_MIN,
 )
+from app.multi_agent.pipeline_config import DEFAULT_MAX_LOOPS, validate_pipeline_config
+from app.multi_agent.role_runtime import RoleRuntime
+from app.multi_agent.roles import ResearcherRole, ReviewerRole, WriterRole
 from app.multi_agent.roles.base_role import BaseRole, RoleContext
 from app.multi_agent.schemas import (
     DraftSection,
@@ -209,4 +213,170 @@ def build_graph(roles, planner, ctx) -> "StateGraph":
     )
     comp.add_edge("finalize", END)
 
+    return comp.compile()
+
+
+# ---------------------------------------------------------------------------
+# 配置驱动的通用流水线（任意角色、任意编排）——与上面的三角色专用图并存
+# ---------------------------------------------------------------------------
+
+def _merge_dict(left: dict, right: dict) -> dict:
+    """dict 合并 reducer：outputs/loops 由多个节点累积写入，整字段覆盖会互相冲掉。"""
+    return {**(left or {}), **(right or {})}
+
+
+class GenericPipelineState(TypedDict):
+    """通用链式流水线状态。
+
+    outputs/loops 用合并 reducer（与 log 的 operator.add 同理：多节点累积而非覆盖）；
+    loops 只由带 route 的节点写入，值为该节点的执行轮数——回跳数 = 轮数 - 1，
+    条件路由据此判上限。revision_notes 为失败节点的校验意见，供回跳目标改写用。
+    """
+
+    task: str
+    outputs: Annotated[dict[str, dict], _merge_dict]
+    revision_notes: list[str]
+    loops: Annotated[dict[str, int], _merge_dict]
+    execution_log: Annotated[list[str], operator.add]
+
+
+def make_pipeline_initial_state(task: str) -> dict:
+    """通用链的入口 state（图经 ainvoke 驱动，API/测试都用它起步）。"""
+    return {
+        "task": task,
+        "outputs": {},
+        "revision_notes": [],
+        "loops": {},
+        "execution_log": [],
+    }
+
+
+def pipeline_iterations(state: dict) -> int:
+    """最大回跳数：loops 值是带 route 节点的执行轮数，回跳数 = 轮数 - 1，取全图最大。"""
+    loops = state.get("loops") or {}
+    return max(loops.values()) - 1 if loops else 0
+
+
+def _route_action(output: dict, runs: int, route_cfg: dict) -> str:
+    """条件边判定（节点记日志与条件路由共用同一纯函数）。
+
+    runs 为该节点含本次在内的执行轮数；已发生的回跳数 = runs - 1，
+    故「还有回跳额度」即 runs <= max_loops。节点与路由读到的 runs 一致
+    （节点无条件先自增再返回，路由读的是合并后的同一值），纯函数输入相同
+    结果必然相同，两处判定不会漂移。
+    """
+    passed = output.get(route_cfg["pass_field"]) == route_cfg["pass_value"]
+    if passed or runs > route_cfg["max_loops"]:
+        return "forward"
+    return "revise"
+
+
+def _make_pipeline_node(runtime: RoleRuntime, route_cfg: dict | None, ctx: RoleContext):
+    """为单个 RoleRuntime 生成图节点（route_cfg/ctx 闭包捕获，不落模块级全局）。"""
+
+    async def node(state: GenericPipelineState) -> dict:
+        output, runtime_log = await runtime.run(
+            ctx,
+            task=state["task"],
+            previous_outputs=dict(state.get("outputs") or {}),
+            revision_notes=state.get("revision_notes") or None,
+        )
+        log = [f"[{runtime.name}] {line}" for line in runtime_log]
+        if "_raw" in output:
+            log.append(f"[{runtime.name}] JSON 解析失败，走 _raw 兜底")
+        updates: dict = {"outputs": {runtime.name: output}}
+
+        if route_cfg is None:
+            log.append(f"[{runtime.name}] 完成，输出字段: {list(output)}")
+            return {**updates, "execution_log": log}
+
+        runs = (state.get("loops") or {}).get(runtime.name, 0) + 1
+        updates["loops"] = {runtime.name: runs}
+        action = _route_action(output, runs, route_cfg)
+        if action == "revise":
+            updates["revision_notes"] = [
+                f"[{runtime.name}] 第 {runs} 次校验未通过（{route_cfg['pass_field']}"
+                f" 期望 {route_cfg['pass_value']}），上次输出: "
+                f"{json.dumps(output, ensure_ascii=False)[:300]}"
+            ]
+            log.append(
+                f"[{runtime.name}] 校验未通过（第 {runs} 次执行），"
+                f"回跳 {route_cfg['revise_to']}（第 {runs}/{route_cfg['max_loops']} 次回跳）"
+            )
+        else:
+            # 通过则清掉过期意见；超限强制前进同样清空并留痕
+            updates["revision_notes"] = []
+            if "_raw" not in output and output.get(route_cfg["pass_field"]) == route_cfg["pass_value"]:
+                log.append(f"[{runtime.name}] 校验通过")
+            else:
+                log.append(
+                    f"[{runtime.name}] 校验未通过（第 {runs} 次执行），"
+                    f"达回跳上限 {route_cfg['max_loops']}，强制前进"
+                )
+        updates["execution_log"] = log
+        return updates
+
+    return node
+
+
+def _make_route_router(runtime: RoleRuntime, route_cfg: dict):
+    """条件路由：读节点写好的 runs，用同一纯函数决定 forward/revise。"""
+
+    def router(state: GenericPipelineState) -> str:
+        output = (state.get("outputs") or {}).get(runtime.name, {})
+        runs = (state.get("loops") or {}).get(runtime.name, 0)
+        return _route_action(output, runs, route_cfg)
+
+    return router
+
+
+def _normalize_route(route: dict) -> dict:
+    return {
+        "pass_field": route["pass_field"],
+        "pass_value": route["pass_value"],
+        "revise_to": route["revise_to"],
+        "max_loops": route.get("max_loops", DEFAULT_MAX_LOOPS),
+    }
+
+
+def build_pipeline(config: dict, ctx: RoleContext) -> "StateGraph":
+    """按流水线配置建图。engine=research 委托三角色专用图；engine=chain 建通用链。
+
+    chain 拓扑：roles 顺序线性连边；带 route 的节点改用条件边
+    （forward -> 下一节点/END，revise -> revise_to），其余节点普通连边。
+    校验失败抛 ValueError（消息带流水线/角色名）。
+    """
+    validate_pipeline_config(config)
+    engine = config.get("engine")
+
+    if engine == "research":
+        roles = {
+            "researcher": ResearcherRole(),
+            "writer": WriterRole(),
+            "reviewer": ReviewerRole(),
+        }
+        return build_graph(roles, ResearchPlanner(), ctx)
+
+    runtimes = [RoleRuntime(spec) for spec in config["roles"]]
+    routes = [
+        _normalize_route(spec["route"]) if spec.get("route") is not None else None
+        for spec in config["roles"]
+    ]
+
+    comp = StateGraph(GenericPipelineState)
+    for i, rt in enumerate(runtimes):
+        comp.add_node(rt.name, _make_pipeline_node(rt, routes[i], ctx))
+
+    comp.set_entry_point(runtimes[0].name)
+    for i, rt in enumerate(runtimes):
+        next_key = runtimes[i + 1].name if i + 1 < len(runtimes) else END
+        route_cfg = routes[i]
+        if route_cfg is None:
+            comp.add_edge(rt.name, next_key)
+        else:
+            comp.add_conditional_edges(
+                rt.name,
+                _make_route_router(rt, route_cfg),
+                {"forward": next_key, "revise": route_cfg["revise_to"]},
+            )
     return comp.compile()

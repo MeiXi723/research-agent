@@ -1,0 +1,12 @@
+{
+  "name": "diy_example",
+  "description": "示例：四角色自定义链",
+  "engine": "chain",
+  "roles": [
+    {"name": "planner", "system_prompt": "你是规划员，把任务拆成要点，输出 JSON {\"points\": [...]}。", "tools": [], "output_fields": ["points"]},
+    {"name": "searcher", "system_prompt": "你是检索员，用工具查资料并输出 JSON {\"findings\": [...]}。", "tools": ["search_docs", "web_search"], "output_fields": ["findings"]},
+    {"name": "analyst", "system_prompt": "你是分析师，综合上一步结果输出 JSON {\"analysis\": \"...\", \"confidence\": 0.0}。", "tools": [], "output_fields": ["analysis", "confidence"]},
+    {"name": "reviewer", "system_prompt": "你是审核员，检查上一步是否可靠，输出 JSON {\"passed\": true/false, \"notes\": \"...\"}。", "tools": [], "output_fields": ["passed", "notes"],
+     "route": {"pass_field": "passed", "pass_value": true, "revise_to": "analyst", "max_loops": 2}}
+  ]
+}

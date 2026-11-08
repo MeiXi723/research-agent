@@ -6,7 +6,8 @@ def _summarizer_ok(messages):
 
 
 def test_estimate_tokens():
-    assert estimate_tokens([{"content": "你好" * 10}]) == 20
+    # tiktoken cl100k_base 口径："你好"x10 编码为 10 个 token
+    assert estimate_tokens([{"content": "你好" * 10}]) == 10
 
 
 def test_manage_context_within_budget():

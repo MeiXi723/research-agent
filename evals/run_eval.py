@@ -180,15 +180,62 @@ def eval_probe() -> list[dict]:
         return records
 
 
+
+
+def eval_router(n: int | None) -> list[dict]:
+    """路由漏斗分层覆盖率（离线口径：L3 不打真 LLM，fallback 照实计层）。
+
+    评测集刻意全用样本库之外的改写/口语化问法——测泛化，不测背题。
+    L1+L2 覆盖率是设计契约：目标 >= 90%。
+    """
+    from app.services.intent_router import classify_intent, reload_samples
+    from app.services.llm import LLMService
+
+    from app.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
+
+    reload_samples()
+    svc = LLMService(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+    cases = json.loads((Path(__file__).parent / "router_set.json").read_text(encoding="utf-8"))["cases"]
+    if n:
+        cases = cases[:n]
+    records = []
+    layer_hits: dict[str, int] = {}
+    correct = 0
+    correct_l12 = correct_l12_total = 0
+    for i, c in enumerate(cases):
+        d = classify_intent(c["q"], embed_fn=svc.embed)
+        ok = d["intent"] == c["intent"]
+        correct += ok
+        layer_hits[d["via"]] = layer_hits.get(d["via"], 0) + 1
+        if d["via"] in ("rule", "semantic"):
+            correct_l12_total += 1
+            correct_l12 += ok
+        records.append({
+            "mode": "router", "idx": i, "question": c["q"],
+            "expected": c["intent"], "got": d["intent"],
+            "ok": ok, "via": d["via"], "layer": d.get("layer"),
+            "reason": d.get("reason", ""),
+        })
+    summary = {
+        "mode": "router", "total": len(cases), "accuracy": round(correct / max(len(cases), 1), 3),
+        "layer_hits": layer_hits,
+        "l12_coverage_of_all": round(correct_l12_total / max(len(cases), 1), 3),
+        "l12_accuracy_when_hit": round(correct_l12 / max(correct_l12_total, 1), 3),
+        "note": "离线口径：L3 用 fallback 计层；真 LLM 口径加 --live（未实现前以离线为准）",
+    }
+    records.append(summary)
+    return records
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["recall", "agent", "compare", "probe"], required=True)
+    parser.add_argument("--mode", choices=["recall", "agent", "compare", "probe", "router"], required=True)
     parser.add_argument("--n", type=int, default=None, help="取前 N 题（默认全量）")
     args = parser.parse_args()
 
     runner = {
         "recall": eval_recall, "agent": eval_agent,
-        "compare": eval_compare, "probe": eval_probe,
+        "compare": eval_compare, "probe": eval_probe, "router": eval_router,
     }[args.mode]
     records = runner(args.n)
 
@@ -203,6 +250,8 @@ def main():
     if args.mode == "recall":
         hits = sum(1 for r in records if r["hit"])
         print(f"recall@5: {hits}/{len(records)} = {hits / max(len(records), 1):.2%}")
+    elif args.mode == "router":
+        print(f"router summary: {json.dumps(records[-1], ensure_ascii=False)}")
     elif args.mode in ("agent", "compare"):
         if args.mode == "agent":
             ems = sum(1 for r in records if r["em"])

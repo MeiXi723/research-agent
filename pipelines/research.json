@@ -1,0 +1,6 @@
+{
+  "name": "research",
+  "description": "经典三角色研究流水线（planner→researcher→writer↔reviewer），复用内置专用图",
+  "engine": "research",
+  "default": true
+}

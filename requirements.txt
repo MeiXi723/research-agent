@@ -16,6 +16,8 @@ mcp==2.3.0
 langgraph==1.2.20
 # Windows zoneinfo 必需（mcp 参考服务器的 now_tz 依赖）
 tzdata==2026.6
+# v2.0 观测层：真实 token 计数（v1 用字符数冒充，CJK 下偏差可达 2 倍）
+tiktoken==0.14.0
 # 测试/质量门
 pytest-cov==7.1.0
 ruff==0.17.4

@@ -66,15 +66,49 @@ class LLMService:
         self.chat_client = OpenAI(api_key=api_key, base_url=base_url,
                                   timeout=LLM_TIMEOUT_SECONDS)
         self._embed_model = None
+        # 最近一次调用的真实 token 用量（OpenAI resp.usage）；AI_MOCK 回放时为 None
+        self.last_usage: dict | None = None
 
     def _ensure_embed_model(self):
         if self._embed_model is not None:
             return
+        self._ensure_local_model_cache()
         try:
             from fastembed import TextEmbedding
             self._embed_model = TextEmbedding(model_name="BAAI/bge-small-zh-v1.5")
         except Exception:
             self._embed_model = "fallback"
+
+    @staticmethod
+    def _ensure_local_model_cache():
+        """fastembed 0.4.1 缓存默认在 %TEMP%/fastembed_cache 且国内无法在线下载。
+
+        环境自愈：HF 缓存里有同名模型时自动迁移过去（一次性，模式取自
+        14-agent-ecosystem 的 _ensure_model_cache）。用户显式设了
+        FASTEMBED_CACHE_PATH 则完全尊重不干预。
+        """
+        import os
+        import shutil
+        import tempfile
+        from pathlib import Path
+
+        if os.getenv("FASTEMBED_CACHE_PATH"):
+            return
+        target = Path(tempfile.gettempdir()) / "fastembed_cache" / "fast-bge-small-zh-v1.5"
+        if target.exists() and any(target.iterdir()):
+            return
+        hf_snapshots = (Path.home() / ".cache" / "huggingface" / "hub"
+                        / "models--Qdrant--bge-small-zh-v1.5" / "snapshots")
+        if not hf_snapshots.exists():
+            return
+        try:
+            snapshot = next(hf_snapshots.iterdir())
+            target.mkdir(parents=True, exist_ok=True)
+            for f in snapshot.iterdir():
+                if f.is_file():
+                    shutil.copy2(f, target / f.name)
+        except Exception:
+            pass  # 自愈尽力而为，失败走在线下载/哈希降级
 
     def embed(self, text: str) -> list[float]:
         self._ensure_embed_model()
@@ -121,6 +155,12 @@ class LLMService:
                 content = resp.choices[0].message.content
                 if _RECORD_MODE and not AI_MOCK:
                     _mock_record(_mock_key("chat", payload), "chat", payload, content)
+                if getattr(resp, "usage", None):
+                    self.last_usage = {
+                        "prompt_tokens": resp.usage.prompt_tokens,
+                        "completion_tokens": resp.usage.completion_tokens,
+                        "total_tokens": resp.usage.total_tokens,
+                    }
                 return content
             except Exception:
                 if attempt == MAX_LLM_RETRIES - 1:
@@ -158,6 +198,12 @@ class LLMService:
                         ],
                     }
                     _mock_record(_mock_key("chat_with_tools", payload), "chat_with_tools", payload, record)
+                if getattr(resp, "usage", None):
+                    self.last_usage = {
+                        "prompt_tokens": resp.usage.prompt_tokens,
+                        "completion_tokens": resp.usage.completion_tokens,
+                        "total_tokens": resp.usage.total_tokens,
+                    }
                 return message
             except Exception:
                 if attempt == MAX_LLM_RETRIES - 1:
@@ -171,6 +217,7 @@ class AsyncLLMService:
     def __init__(self, api_key: str, base_url: str):
         self.chat_client = AsyncOpenAI(api_key=api_key, base_url=base_url,
                                        timeout=LLM_TIMEOUT_SECONDS)
+        self.last_usage: dict | None = None
 
     async def chat(self, messages: list[dict], model: str = "deepseek-chat",
                    temperature: float = 0.7) -> str:
@@ -181,6 +228,12 @@ class AsyncLLMService:
                     messages=messages,
                     temperature=temperature,
                 )
+                if getattr(resp, "usage", None):
+                    self.last_usage = {
+                        "prompt_tokens": resp.usage.prompt_tokens,
+                        "completion_tokens": resp.usage.completion_tokens,
+                        "total_tokens": resp.usage.total_tokens,
+                    }
                 return resp.choices[0].message.content
             except Exception:
                 if attempt == MAX_LLM_RETRIES - 1:
