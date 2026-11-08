@@ -44,3 +44,23 @@ MCP_TOOL_TIMEOUT = float(os.getenv("MCP_TOOL_TIMEOUT", "30"))
 # EVAL_*: L4 评测层（opt-in）
 EVAL_DATASETS_DIR = os.getenv("EVAL_DATASETS_DIR", "./evals/datasets")
 EVAL_TOP_K = int(os.getenv("EVAL_TOP_K", "5"))
+
+# ---------------------------------------------------------------------------
+# v2.0 多模态视觉专线 —— 与文本通道（DEEPSEEK_*）完全解耦的独立提供商
+# ---------------------------------------------------------------------------
+#
+# 文本模型（DeepSeek 官方）没有视觉能力，图片理解走这条独立专线：
+# 任意 OpenAI 兼容的视觉端点都可接入（智谱 GLM-4V / 方舟 doubao-vision /
+# OpenRouter qwen-vl 等），格式为 messages[].content 数组 + image_url(base64)。
+#
+# VISION_API_KEY 为空 = 专线未配置：图片上传优雅降级（400 + 明确提示），
+# 不影响文本问答全链路。
+VISION_API_KEY = os.getenv("VISION_API_KEY", "")
+VISION_BASE_URL = os.getenv("VISION_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+VISION_MODEL = os.getenv("VISION_MODEL", "glm-4v-flash")
+VISION_TIMEOUT_SECONDS = float(os.getenv("VISION_TIMEOUT_SECONDS", "60"))
+# 图片入库描述的默认提问
+VISION_DESCRIBE_PROMPT = os.getenv(
+    "VISION_DESCRIBE_PROMPT",
+    "详细描述这张图片的全部文字内容与关键信息，输出可供检索的纯文本，保留数字与专有名词。",
+)

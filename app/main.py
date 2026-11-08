@@ -12,6 +12,7 @@ from app.config import (
     FAISS_PERSIST_DIR, SQLITE_PATH, UPLOAD_DIR,
     CHUNK_SIZE, CHUNK_OVERLAP,
     TRACE_DIR, MCP_SERVERS,
+    VISION_API_KEY, VISION_BASE_URL, VISION_MODEL,
 )
 from app.db.sqlite import Database
 from app.db.vector import VectorStore
@@ -20,6 +21,7 @@ from app.services.document import parse_file, chunk_text
 from app.services.agent import run_agent, set_mcp_tools
 from app.services.memory import SemanticMemory, set_memory
 from app.services.tracer import Tracer
+from app.services.vision import VisionService, VisionError, VisionUnavailableError
 from app.tools.search_docs import set_vector_store
 from app.models.schemas import (
     AgentStep, AskRequest, AskResponse, DocumentResponse, ConversationResponse,
@@ -31,11 +33,12 @@ _vector_store: VectorStore | None = None
 _tracer: Tracer | None = None
 _mcp_manager = None
 _llm_service = None
+_vision_service = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _db, _vector_store, _tracer, _mcp_manager, _llm_service
+    global _db, _vector_store, _tracer, _mcp_manager, _llm_service, _vision_service
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     os.makedirs(FAISS_PERSIST_DIR, exist_ok=True)
@@ -62,6 +65,9 @@ async def lifespan(app: FastAPI):
     )
 
     set_memory(SemanticMemory(_db, embed_fn=_llm_service.embed))
+    # 显式传参：VisionService 默认值在 vision.py import 时冻结，patch config 属性无效
+    _vision_service = VisionService(api_key=VISION_API_KEY, base_url=VISION_BASE_URL,
+                                    model=VISION_MODEL)
 
     # MCP stdio 子进程：启动拉起 / shutdown 终止（孤儿检测在 provider 内）
     _mcp_manager = None
@@ -212,12 +218,41 @@ def upload_document(file: UploadFile = File(...)):
     safe_name = os.path.basename(raw_name)
     if not safe_name or safe_name in {".", ".."}:
         raise HTTPException(status_code=400, detail="非法文件名")
+    # 图片走视觉专线单独处理，不进 parse_file 的文本白名单
+    ext = os.path.splitext(safe_name)[1].lower()
 
     file_path = os.path.join(UPLOAD_DIR, safe_name)
 
     content = file.file.read()
     with open(file_path, "wb") as f:
         f.write(content)
+
+    # ── 多模态专线：图片走视觉描述后入库（文本模型没有视觉能力） ──
+    if ext in {".png", ".jpg", ".jpeg"}:
+        try:
+            description = _vision_service.describe_image(file_path)
+        except VisionUnavailableError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except VisionError as e:
+            raise HTTPException(status_code=502, detail=f"视觉专线调用失败: {e}")
+        doc_id = _db.insert_document(
+            filename=safe_name,
+            file_type=ext.lstrip("."),
+            file_size=len(content),
+            chunk_count=1,
+        )
+        embedding = _llm_service.embed(description)
+        _vector_store.add(
+            [f"{doc_id}_img0"], [description], [embedding],
+            [{"document_id": doc_id, "document_name": safe_name,
+              "chunk_index": 0, "modality": "image"}],
+        )
+        record = _db.get_document(doc_id)
+        return DocumentResponse(
+            id=record["id"], filename=record["filename"], file_type=record["file_type"],
+            file_size=record["file_size"], chunk_count=record["chunk_count"],
+            created_at=record["created_at"],
+        )
 
     text = parse_file(file_path)
     chunks = chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)

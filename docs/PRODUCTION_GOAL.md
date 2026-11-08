@@ -30,6 +30,7 @@
 - [ ] Docker 镜像构建验证（`docker compose build` + healthcheck 通过）
 - [ ] AI_MOCK 录制集入库（真 key 首跑后录制 → CI 全离线冒烟）
 - [ ] 评测报告归档纪律：每次 run_eval 报告留存 evals/reports/ 并在 README 记录最新数字
+- [x] 多模态视觉专线：图片上传 → 视觉描述 → 入库检索全链路（本地 OpenAI 兼容 stub 真实 HTTP 验证；真实智谱 key 填 VISION_API_KEY 即切真模型）
 - [ ] 冷启动预热（embedding/MCP server 启动即加载，消灭首请求超时）
 
 ## 阻塞与解法

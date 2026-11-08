@@ -70,6 +70,20 @@ DEEPSEEK_MODEL=deepseek-v4-1-flash-261017   # 以控制台「开通管理」实�
 代码侧模型名全部由 `DEEPSEEK_MODEL` 环境变量驱动，无硬编码。
 旧 DeepSeek 直连配置备份在 `.env.deepseek.bak`（不入库）。
 
+
+### 多模态视觉专线（图片文档入库）
+
+文本通道（DeepSeek）与视觉通道完全解耦——`.env` 三行接入任意 OpenAI 兼容视觉端点：
+
+```
+VISION_API_KEY=你的智谱key        # glm-4v-flash 免费
+VISION_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+VISION_MODEL=glm-4v-flash
+```
+
+上传 `.png/.jpg/.jpeg` → 视觉模型生成可检索描述 → 入 FAISS → `/ask` 即可问到图片内容。
+`VISION_API_KEY` 未配置时图片上传优雅降级（400 + 指引），文本链路不受影响。
+
 ## Roadmap
 
 - [ ] 真实 LLM 对照评测跑量（HotpotQA 等，`make compare` + `make pull-evals`）
