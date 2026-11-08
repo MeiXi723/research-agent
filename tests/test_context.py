@@ -1,3 +1,4 @@
+from app.services import context as ctx
 from app.services.context import estimate_tokens, manage_context
 
 
@@ -6,8 +7,13 @@ def _summarizer_ok(messages):
 
 
 def test_estimate_tokens():
-    # tiktoken cl100k_base 口径："你好"x10 编码为 10 个 token
-    assert estimate_tokens([{"content": "你好" * 10}]) == 10
+    # 双口径：tiktoken 可用（BPE 词表已在缓存/可下载）→ 真编码 10；
+    # 词表不可达的离线环境自动降级为字符数//2 → 20。两种实现都合法。
+    msgs = [{"content": "你好" * 10}]
+    if ctx._get_encoding() is not None:
+        assert estimate_tokens(msgs) == 10
+    else:
+        assert estimate_tokens(msgs) == 20
 
 
 def test_manage_context_within_budget():
