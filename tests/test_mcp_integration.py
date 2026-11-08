@@ -62,17 +62,24 @@ def provider():
 
 
 def _find_server_pids() -> list[int]:
-    ps_script = (
-        "Get-CimInstance Win32_Process "
-        "| Where-Object { $_.CommandLine -like '*research_server.py*' } "
-        "| Select-Object -ExpandProperty ProcessId"
-    )
+    # Windows 无 /proc、POSIX 无 powershell——按平台分支取 research_server.py 的 PID
+    if sys.platform == "win32":
+        ps_script = (
+            "Get-CimInstance Win32_Process "
+            "| Where-Object { $_.CommandLine -like '*research_server.py*' } "
+            "| Select-Object -ExpandProperty ProcessId"
+        )
+        proc = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_script],
+            capture_output=True, timeout=30, check=False,
+            # PowerShell 输出走系统本地代码页（中文系统 GBK），只提取 ASCII 数字行，
+            # 解码失败一律 replace，不让 reader 线程崩 UnicodeDecodeError
+            encoding="utf-8", errors="replace",
+        )
+        return [int(line.strip()) for line in proc.stdout.splitlines() if line.strip().isdigit()]
     proc = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", ps_script],
+        ["pgrep", "-f", "research_server.py"],
         capture_output=True, timeout=30, check=False,
-        # PowerShell 输出走系统本地代码页（中文系统 GBK），只提取 ASCII 数字行，
-        # 解码失败一律 replace，不让 reader 线程崩 UnicodeDecodeError
-        encoding="utf-8", errors="replace",
     )
     return [int(line.strip()) for line in proc.stdout.splitlines() if line.strip().isdigit()]
 
