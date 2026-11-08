@@ -149,7 +149,7 @@ def test_image_upload_without_vision_key_degrades_gracefully(tmp_path):
     # 专线未配置 → 400 + 明确指引（不 500、不影响文本链路）
     import os
 
-    with patch("app.config.VISION_API_KEY", ""), \
+    with patch("app.main.VISION_API_KEY", ""), \
          patch("app.main.SQLITE_PATH", os.path.join(tmp_path, "t.db")), \
          patch("app.main.UPLOAD_DIR", os.path.join(tmp_path, "up")), \
          patch("app.main.FAISS_PERSIST_DIR", os.path.join(tmp_path, "faiss")), \
