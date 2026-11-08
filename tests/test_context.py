@@ -7,13 +7,13 @@ def _summarizer_ok(messages):
 
 
 def test_estimate_tokens():
-    # 双口径：tiktoken 可用（BPE 词表已在缓存/可下载）→ 真编码 10；
-    # 词表不可达的离线环境自动降级为字符数//2 → 20。两种实现都合法。
+    # 双口径（实测标定）：tiktoken cl100k 可用 → 「你好」每字 1 token，20 字 = 20；
+    # BPE 词表不可达的离线环境降级为字符数//2 → 10。两种实现都合法。
     msgs = [{"content": "你好" * 10}]
     if ctx._get_encoding() is not None:
-        assert estimate_tokens(msgs) == 10
-    else:
         assert estimate_tokens(msgs) == 20
+    else:
+        assert estimate_tokens(msgs) == 10
 
 
 def test_manage_context_within_budget():
