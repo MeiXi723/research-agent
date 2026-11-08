@@ -11,3 +11,13 @@ pytest==8.3.4
 httpx==0.28.1
 numpy==1.26.4
 requests==2.32.3
+# v2.0：MCP 官方 SDK（stdio 子进程接入第三方工具生态）+ LangGraph 多智能体编排
+mcp==2.3.0
+langgraph==1.2.20
+# Windows zoneinfo 必需（mcp 参考服务器的 now_tz 依赖）
+tzdata==2026.6
+# v2.0 观测层：真实 token 计数（v1 用字符数冒充，CJK 下偏差可达 2 倍）
+tiktoken==0.14.0
+# 测试/质量门
+pytest-cov==7.1.0
+ruff==0.17.4

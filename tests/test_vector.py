@@ -45,7 +45,8 @@ def test_delete_by_document_id(vs):
 
 
 def test_persistence(vs):
-    vs.add(["c1"], ["persist test"], [[0.3]*384], [{"document_id": "doc-1", "document_name": "p.pdf", "chunk_index": 0}])
+    vs.add(["c1"], ["persist test"], [[0.3] * 384],
+           [{"document_id": "doc-1", "document_name": "p.pdf", "chunk_index": 0}])
     vs.close()
 
     store2 = VectorStore("./data/test_faiss")

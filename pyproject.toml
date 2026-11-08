@@ -1,0 +1,26 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -m 'not e2e and not eval'"
+markers = [
+    "unit: 纯 mock 离线单测（默认跑）",
+    "integration: 真实子进程/真实模型加载，无网络（CI 跑）",
+    "e2e: 本地全链路冒烟（CI 默认排除，make e2e 跑）",
+    "eval: 评测层，opt-in",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:anyio.*",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = [".venv", "data", "evals/datasets", "evals/reports"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI 惯用模式：app 实例创建后再挂 router
+"app/main.py" = ["E402"]
+# evals 脚本需先把仓库根塞进 sys.path 再 import app——E402 属结构性豁免
+"evals/*.py" = ["E402"]

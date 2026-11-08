@@ -5,6 +5,10 @@ from pydantic import BaseModel, Field
 class AskRequest(BaseModel):
     question: str = Field(description="用户问题")
     conversation_id: str | None = Field(default=None, description="对话 ID，为空则新建对话")
+    force_route: str | None = Field(
+        default=None,
+        description="强制路由：chat / tool_research / deep_research；缺省走意图识别路由层",
+    )
 
 
 class AgentStep(BaseModel):
@@ -28,6 +32,11 @@ class AskResponse(BaseModel):
     steps: list[AgentStep] = Field(description="Agent 每一步记录")
     sources: list[SourceInfo] = Field(description="引用来源")
     conversation_id: str = Field(description="对话 ID")
+    route: str | None = Field(default=None, description="意图路由结果: chat / tool_research / deep_research")
+    metrics: dict | None = Field(
+        default=None,
+        description="运行级指标：token 真实用量、工具调用成败分布、上下文压缩事件、延迟",
+    )
 
 
 class DocumentResponse(BaseModel):
