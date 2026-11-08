@@ -54,6 +54,22 @@ make pull-evals  # 拉取 HotpotQA/2Wiki/MuSiQue（hf-mirror，opt-in）
 
 空知识库 / max_steps 耗尽 / 120s 超时 / 工具异常与未知工具 / 坏 JSON 参数 / 工具结果 500 字符硬截断 / 上下文超限摘要降级 / MCP 子进程被杀与孤儿检测 / MCP 工具超时硬闸 / LLM 重试耗尽 / prompt 注入机制层（系统提示加固 + 探针集，攻击模式素材源自 dsh-purge redteam presets）/ fact_checker LLM 层故障降级。
 
+
+### LLM 提供商：火山方舟（Ark）
+
+`.env` 三行切换（OpenAI 兼容接口，DeepSeek 官方 API 同样适用）：
+
+```
+DEEPSEEK_API_KEY=ark-xxxxxxxx
+DEEPSEEK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+DEEPSEEK_MODEL=deepseek-v4-1-flash-261017   # 以控制台「开通管理」实际开通的模型为准
+```
+
+**重要**：方舟的「订阅套餐」≠「模型开通」——模型 ID 直调要求先在控制台
+「开通管理」页面逐个开通模型服务，否则报 `ModelNotOpen`（404）。
+代码侧模型名全部由 `DEEPSEEK_MODEL` 环境变量驱动，无硬编码。
+旧 DeepSeek 直连配置备份在 `.env.deepseek.bak`（不入库）。
+
 ## Roadmap
 
 - [ ] 真实 LLM 对照评测跑量（HotpotQA 等，`make compare` + `make pull-evals`）

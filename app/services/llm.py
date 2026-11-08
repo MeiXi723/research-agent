@@ -8,7 +8,8 @@ from types import SimpleNamespace
 from openai import AsyncOpenAI, OpenAI
 
 from app.config import (
-    AI_MOCK, AI_MOCK_DIR, LLM_RETRY_BASE_DELAY, LLM_TIMEOUT_SECONDS, MAX_LLM_RETRIES,
+    AI_MOCK, AI_MOCK_DIR, DEEPSEEK_MODEL, LLM_RETRY_BASE_DELAY,
+    LLM_TIMEOUT_SECONDS, MAX_LLM_RETRIES,
 )
 
 _llm_service = None
@@ -135,7 +136,7 @@ class LLMService:
             vec += [0.0] * (target_dims - len(vec))
         return vec[:target_dims]
 
-    def chat(self, messages: list[dict], model: str = "deepseek-chat", temperature: float = 0.7) -> str:
+    def chat(self, messages: list[dict], model: str = DEEPSEEK_MODEL, temperature: float = 0.7) -> str:
         payload = {"model": model, "messages": messages, "temperature": temperature}
         if AI_MOCK or _RECORD_MODE:
             key = _mock_key("chat", payload)
@@ -168,7 +169,7 @@ class LLMService:
                 time.sleep(LLM_RETRY_BASE_DELAY * (2 ** attempt))
 
     def chat_with_tools(self, messages: list[dict], tools: list[dict], tool_choice: str = "auto",
-                        model: str = "deepseek-chat", temperature: float = 0.0):
+                        model: str = DEEPSEEK_MODEL, temperature: float = 0.0):
         payload = {"model": model, "messages": messages, "temperature": temperature,
                    "tools": tools, "tool_choice": tool_choice}
         if AI_MOCK or _RECORD_MODE:
@@ -219,7 +220,7 @@ class AsyncLLMService:
                                        timeout=LLM_TIMEOUT_SECONDS)
         self.last_usage: dict | None = None
 
-    async def chat(self, messages: list[dict], model: str = "deepseek-chat",
+    async def chat(self, messages: list[dict], model: str = DEEPSEEK_MODEL,
                    temperature: float = 0.7) -> str:
         for attempt in range(MAX_LLM_RETRIES):
             try:

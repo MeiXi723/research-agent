@@ -1,7 +1,9 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# override=True：.env 是本项目唯一配置源——shell 里预置的同名环境变量不得
+# 静默压过项目配置（实测：旧 DEEPSEEK_API_KEY 残留在 shell 导致切 key 后仍读旧值）
+load_dotenv(override=True)
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")

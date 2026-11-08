@@ -33,7 +33,7 @@
 
 ## 阻塞与解法
 
-1. **DEEPSEEK key 401**（阻塞 G2 的 LLM 三项：agent EM/F1、v1/v2 对照、成本报告）：`.env` 里 `****33f5` 已失效。检索层/路由层/并发层的真实数据验证已在无 LLM 依赖下完成。
+1. **LLM 提供商切换完成，等控制台开通模型**：`.env` 已切火山方舟（key 认证实测通过，`override=True` 修复旧 shell 环境变量压配置的缺陷），模型 ID 直调报 `ModelNotOpen`——需在方舟控制台「开通管理」开通目标模型（如 deepseek-v4-1-flash-261017）后即闭环 G2 的 LLM 三项（agent EM/F1、v1/v2 对照、成本报告）。检索层/路由层/并发层的真实数据验证已在无 LLM 依赖下完成。
    换有效 key 到 `.env` 后依次跑：
    `python evals/run_eval.py --mode agent --n 10` → `--mode compare --n 5` → 并发真跑。
 2. 数据集候选 id 拉取失败不静默：pull_datasets 逐候选实测，失败降级并在 stderr 声明。
