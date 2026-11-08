@@ -33,6 +33,17 @@
 - [x] 多模态视觉专线：图片上传 → 视觉描述 → 入库检索全链路（本地 OpenAI 兼容 stub 真实 HTTP 验证；真实智谱 key 填 VISION_API_KEY 即切真模型）
 - [ ] 冷启动预热（embedding/MCP server 启动即加载，消灭首请求超时）
 
+## 安全整改批（2026-11-09，P0/P1 全闭环）
+
+| 项 | 状态 |
+|---|---|
+| API 访问门禁（token + localhost 策略） | ✅ 中间件实现，双口径测试 |
+| 网络出口白名单（NET_ALLOWED_HOSTS） | ✅ guard.py 出口闸三处接入（llm/vision/web_search）+ 回环放行（误拦实测修复）+ **覆盖边界：MCP 子进程除外，需宿主防火墙** |
+| 注入 guardrail（标记不删改） | ✅ 5 类注入模式 + 结构化分隔 |
+| token 预算强制熔断（60000/run） | ✅ usage_captured 门槛防 mock 误触 |
+| request-id 串联 + /health vision 状态 | ✅ |
+| Docker 化 / 凭据轮换 | 📋 P3 待办 |
+
 ## 阻塞与解法
 
 1. **LLM 提供商切换完成，等控制台开通模型**：`.env` 已切火山方舟（key 认证实测通过，`override=True` 修复旧 shell 环境变量压配置的缺陷），模型 ID 直调报 `ModelNotOpen`——需在方舟控制台「开通管理」开通目标模型（如 deepseek-v4-1-flash-261017）后即闭环 G2 的 LLM 三项（agent EM/F1、v1/v2 对照、成本报告）。检索层/路由层/并发层的真实数据验证已在无 LLM 依赖下完成。

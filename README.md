@@ -84,6 +84,17 @@ VISION_MODEL=glm-4v-flash
 上传 `.png/.jpg/.jpeg` → 视觉模型生成可检索描述 → 入 FAISS → `/ask` 即可问到图片内容。
 `VISION_API_KEY` 未配置时图片上传优雅降级（400 + 指引），文本链路不受影响。
 
+
+### 安全层（v2.0 安全整改批）
+
+| 机制 | 说明 |
+|---|---|
+| API 访问门禁 | `API_ACCESS_TOKEN` 配置后非本机来源强制 Bearer token（/health、/docs 放行）；留空=本机开发形态 |
+| 网络出口白名单 | `NET_ALLOWED_HOSTS`（默认 DeepSeek/智谱/Tavily）——requests/httpx 层全覆盖；**MCP 子进程出口不受此闸约束**，需宿主防火墙 |
+| 注入 guardrail | 工具结果进 context 前结构化分隔 + 注入模式标记（标记不删改，误杀零风险） |
+| token 预算熔断 | `TOKEN_BUDGET_PER_RUN=60000`——拿到真实 usage 的运行累计超限立即中止（mock 路径不触发） |
+| 审计 | X-Request-ID 响应头串联 + JSONL tracer + agent_steps + /stats + /health |
+
 ## Roadmap
 
 - [ ] 真实 LLM 对照评测跑量（HotpotQA 等，`make compare` + `make pull-evals`）

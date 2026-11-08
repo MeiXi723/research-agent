@@ -17,7 +17,14 @@ TOP_K = int(os.getenv("TOP_K", "3"))
 MAX_AGENT_STEPS = int(os.getenv("MAX_AGENT_STEPS", "10"))
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 MAX_CONTEXT_TOKENS = int(os.getenv("MAX_CONTEXT_TOKENS", "6000"))
-WINDOW_TURNS = int(os.getenv("WINDOW_TURNS", "5"))
+# TOOL_EXEC_TIMEOUT: 内置工具统一超时硬闸（MCP 已有内部 30s，此处为全部工具兜底）
+TOOL_EXEC_TIMEOUT = float(os.getenv("TOOL_EXEC_TIMEOUT", "30"))
+# TOKEN_BUDGET_PER_RUN: 单次 agent 运行的 token 硬预算（安全评估 P2-2）。
+# 拿到真实 usage 的运行累计超过此值 → 立即中止并返回提示；AI_MOCK 路径
+# 无 usage（usage_captured=False）不触发。
+TOKEN_BUDGET_PER_RUN = int(os.getenv("TOKEN_BUDGET_PER_RUN", "60000"))
+# WINDOW_MESSAGES: 上下文压缩后保留的最近消息条数（v2 按消息计，跨 user/assistant/tool）
+WINDOW_MESSAGES = int(os.getenv("WINDOW_MESSAGES", "14"))
 TRACE_DIR = os.getenv("TRACE_DIR", "./data/traces")
 MAX_LLM_RETRIES = int(os.getenv("MAX_LLM_RETRIES", "3"))
 LLM_RETRY_BASE_DELAY = float(os.getenv("LLM_RETRY_BASE_DELAY", "1.0"))
@@ -40,6 +47,26 @@ AI_MOCK_DIR = os.getenv("AI_MOCK_DIR", "./data/ai_mock")
 #   空值 = 不启用 MCP 层，agent 退回内置三工具（与 v1 行为一致）
 MCP_SERVERS = os.getenv("MCP_SERVERS", "")
 MCP_TOOL_TIMEOUT = float(os.getenv("MCP_TOOL_TIMEOUT", "30"))
+
+# ---------------------------------------------------------------------------
+# v2.0 安全门禁（安全评估 P0 批）
+# ---------------------------------------------------------------------------
+#
+# API_ACCESS_TOKEN: API 访问门禁（安全评估 P0-1）。配置后，非本机来源（非
+# 127.0.0.1/::1）的请求必须携带 Authorization: Bearer <token>，否则 403。
+# 留空 = 门禁关闭（本机开发形态）；生产部署/暴露到局域网必须配置。
+# /health 与 /docs 永远放行（探针与排障）。
+API_ACCESS_TOKEN = os.getenv("API_ACCESS_TOKEN", "")
+
+# 网络出口白名单（安全评估 P0-2）：允许访问的域名（host 精确匹配）。
+# 覆盖边界：Python requests/httpx 直连层（llm/vision/web_search）——MCP 子进程
+# 的网络不受此闸约束（需宿主防火墙，文档化于 README）。
+NET_ALLOWED_HOSTS = [
+    h.strip() for h in os.getenv(
+        "NET_ALLOWED_HOSTS",
+        "api.deepseek.com,open.bigmodel.cn,api.tavily.com",
+    ).split(",") if h.strip()
+]
 
 # EVAL_*: L4 评测层（opt-in）
 EVAL_DATASETS_DIR = os.getenv("EVAL_DATASETS_DIR", "./evals/datasets")

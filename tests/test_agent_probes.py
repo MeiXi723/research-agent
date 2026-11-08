@@ -30,7 +30,9 @@ def test_injection_probes_manifest_valid():
 
 def test_tool_result_hard_truncated_at_500_chars():
     # 超长工具结果必须截断——注入负载常借超长文本稀释系统指令
-    class GiantTool:
+    from app.tools.base import BaseTool
+
+    class GiantTool(BaseTool):
         name = "giant"
         description = "返回超长结果"
 
@@ -55,6 +57,7 @@ def test_tool_result_hard_truncated_at_500_chars():
     msg_final = SimpleNamespace(content="done", tool_calls=None)
     with patch("app.services.agent._build_tools", return_value={"giant": GiantTool()}), \
          patch("app.services.agent._llm_service") as mock_llm:
+        mock_llm.last_usage = None
         mock_llm.chat_with_tools.side_effect = [msg_tool, msg_final]
         _, steps, _ = run_agent("触发超长工具结果")
     assert len(steps[0].tool_result) <= 500

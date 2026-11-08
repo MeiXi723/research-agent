@@ -6,6 +6,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.services.metrics import record_usage
+from app.config import API_ACCESS_TOKEN
 
 from app.config import (
     DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL,
@@ -89,6 +90,35 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI Research Agent", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def access_gate(request, call_next):
+    """API 访问门禁（安全评估 P0-1）。
+
+    API_ACCESS_TOKEN 配置后：非本机来源必须携带 Authorization: Bearer <token>；
+    本机回环（127.0.0.1/::1）与 /health、/docs 永远放行。token 留空 = 门禁关闭
+    （本机开发形态）；暴露到局域网/公网前必须配置。
+    """
+    token = API_ACCESS_TOKEN
+    rid = __import__("uuid").uuid4().hex[:12]
+    if token:
+        path = request.url.path
+        open_paths = ("/health", "/docs", "/openapi.json")
+        client_host = request.client.host if request.client else ""
+        is_local = client_host in ("127.0.0.1", "::1", "localhost")
+        if path not in open_paths and not is_local:
+            auth = request.headers.get("authorization", "")
+            if auth != f"Bearer {token}":
+                return JSONResponse(
+                    status_code=403,
+                    headers={"X-Request-ID": rid},
+                    content={"detail": "未授权来源：需携带有效 Authorization token 或从本机访问"},
+                )
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = rid
+    request.state.request_id = rid
+    return response
 
 
 @app.exception_handler(Exception)

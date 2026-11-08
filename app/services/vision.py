@@ -20,6 +20,7 @@ from pathlib import Path
 
 import requests
 
+from app.net.guard import assert_url_allowed
 from app.config import (
     VISION_API_KEY, VISION_BASE_URL, VISION_DESCRIBE_PROMPT,
     VISION_MODEL, VISION_TIMEOUT_SECONDS,
@@ -128,6 +129,7 @@ class VisionService:
         last_error = "未知错误"
         for attempt in range(self.max_retries):
             try:
+                assert_url_allowed(f"{self.base_url}/chat/completions")  # 出口闸（P0-2）
                 resp = requests.post(
                     f"{self.base_url}/chat/completions",
                     headers={"Authorization": f"Bearer {self.api_key}"},

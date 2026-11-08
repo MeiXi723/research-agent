@@ -60,7 +60,10 @@ class Database:
                 key TEXT NOT NULL,
                 value TEXT NOT NULL,
                 source_conversation_id TEXT,
-                created_at TEXT NOT NULL
+                kind TEXT NOT NULL DEFAULT 'note',
+                created_at TEXT NOT NULL,
+                updated_at TEXT,
+                version INTEGER NOT NULL DEFAULT 1
             );
             CREATE TABLE IF NOT EXISTS conversation_messages (
                 conversation_id TEXT PRIMARY KEY,
@@ -69,6 +72,16 @@ class Database:
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
             );
         """)
+        # 旧库迁移：v1 的 memories 无 kind/updated_at/version 列（列已存在则忽略）
+        for ddl in (
+            "ALTER TABLE memories ADD COLUMN kind TEXT NOT NULL DEFAULT 'note'",
+            "ALTER TABLE memories ADD COLUMN updated_at TEXT",
+            "ALTER TABLE memories ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+        ):
+            try:
+                self.conn.execute(ddl)
+            except Exception:
+                pass
 
     def close(self):
         self.conn.close()
@@ -150,10 +163,20 @@ class Database:
 
     # ── memories ──
 
-    def save_memory(self, key: str, value: str, source_conv_id: str | None = None):
+    def save_memory(self, key: str, value: str, source_conv_id: str | None = None,
+                    kind: str = "note"):
+        now = _now()
         self._write(
-            "INSERT INTO memories (key, value, source_conversation_id, created_at) VALUES (?,?,?,?)",
-            (key, value, source_conv_id, _now())
+            "INSERT INTO memories (key, value, source_conversation_id, kind, created_at, updated_at, version) "
+            "VALUES (?,?,?,?,?,?,1)",
+            (key, value, source_conv_id, kind, now, now)
+        )
+
+    def update_memory(self, memory_id: int, new_value: str):
+        """更新记忆内容：version+1 + updated_at 刷新（历史版本不保留，updated_at 即时序）。"""
+        self._write(
+            "UPDATE memories SET value=?, version=version+1, updated_at=? WHERE id=?",
+            (new_value, _now(), memory_id)
         )
 
     def get_memories(self) -> list[dict]:

@@ -1,6 +1,7 @@
 import requests
 
 from app.config import TAVILY_API_KEY
+from app.net.guard import assert_url_allowed
 from app.tools.base import BaseTool
 
 
@@ -34,6 +35,7 @@ class WebSearchTool(BaseTool):
             return []
 
         try:
+            assert_url_allowed("https://api.tavily.com/search")  # 出口闸（P0-2）
             resp = requests.post(
                 "https://api.tavily.com/search",
                 json={

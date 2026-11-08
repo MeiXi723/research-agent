@@ -21,6 +21,7 @@ def _make_tool_call(tool_id, name, arguments):
 
 @patch("app.services.agent._llm_service")
 def test_run_agent_direct_answer(mock_llm):
+    mock_llm.last_usage = None  # MagicMock getattr 自动造属性，防 usage 污染
     mock_llm.chat_with_tools.return_value = _make_msg(content="答案是 42")
 
     answer, steps, sources = run_agent("1+1 等于多少")
@@ -32,6 +33,7 @@ def test_run_agent_direct_answer(mock_llm):
 
 @patch("app.services.agent._llm_service")
 def test_run_agent_with_tool_call(mock_llm):
+    mock_llm.last_usage = None  # MagicMock getattr 自动造属性，防 usage 污染
     mock_llm.chat_with_tools.side_effect = [
         _make_msg(tool_calls=[_make_tool_call("call_1", "calculator", '{"expression": "2+3"}')]),
         _make_msg(content="结果是 5"),
@@ -47,6 +49,7 @@ def test_run_agent_with_tool_call(mock_llm):
 
 @patch("app.services.agent._llm_service")
 def test_run_agent_unknown_tool(mock_llm):
+    mock_llm.last_usage = None  # MagicMock getattr 自动造属性，防 usage 污染
     mock_llm.chat_with_tools.side_effect = [
         _make_msg(tool_calls=[_make_tool_call("call_1", "not_exist", '{}')]),
         _make_msg(content="无法执行"),
@@ -55,11 +58,13 @@ def test_run_agent_unknown_tool(mock_llm):
     answer, steps, sources = run_agent("测试")
 
     assert answer == "无法执行"
-    assert steps[0].tool_result == '{"error": "未知工具: not_exist"}'
+    assert "未知工具: not_exist" in steps[0].tool_result
+    assert '"retryable": false' in steps[0].tool_result  # v2：error 携带可重试标志
 
 
 @patch("app.services.agent._llm_service")
 def test_run_agent_max_steps(mock_llm):
+    mock_llm.last_usage = None  # MagicMock getattr 自动造属性，防 usage 污染
     mock_llm.chat_with_tools.side_effect = [
         _make_msg(tool_calls=[_make_tool_call("call_1", "calculator", '{"expression": "1+1"}')]),
     ] * 100
@@ -71,6 +76,7 @@ def test_run_agent_max_steps(mock_llm):
 
 @patch("app.services.agent._llm_service")
 def test_run_agent_with_tracer(mock_llm, tmp_path):
+    mock_llm.last_usage = None  # MagicMock getattr 自动造属性，防 usage 污染
     mock_llm.chat_with_tools.return_value = _make_msg(content="答案")
 
     tracer = Tracer(str(tmp_path))
