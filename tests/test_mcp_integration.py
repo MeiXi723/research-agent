@@ -12,6 +12,7 @@ import json
 import subprocess
 import threading
 import time
+import sys
 from pathlib import Path
 
 import pytest
@@ -24,7 +25,9 @@ from app.mcp_client.provider import (
 from app.tools.base import BaseTool
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-VENV_PYTHON = str(PROJECT_ROOT / ".venv" / "Scripts" / "python.exe")
+# sys.executable = pytest 自身所在解释器（CI 与本地都在 venv 里），天然跨平台；
+# 写死 .venv/Scripts/python.exe 会在 Linux CI 上 FileNotFoundError（bin/ 布局）
+VENV_PYTHON = sys.executable
 SERVER_SCRIPT = str(PROJECT_ROOT / "mcp_servers" / "research_server.py")
 TOOL_TIMEOUT = 10.0
 
