@@ -9,10 +9,10 @@
 # =============================================================================
 
 
-def new_metrics(intent: str | None = None, route_via: str | None = None) -> dict:
+def new_metrics() -> dict:
+    # 路由字段（intent/route_via）归 main 层所有——agent 的 sink update 不允许
+    # 覆盖它们（并发冒烟实测：sink.update 会把路由字段冲成 None）
     return {
-        "intent": intent,
-        "route_via": route_via,
         "llm_calls": 0,
         "prompt_tokens": 0,
         "completion_tokens": 0,

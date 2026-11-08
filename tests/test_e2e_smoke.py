@@ -27,6 +27,7 @@ def client():
     with TestClient(app) as c:  # lifespan：db/faiss/memory/llm 单例 + /health 就绪
         mock = MagicMock()
         mock.embed.return_value = [0.1] * 384
+        mock.last_usage = None  # MagicMock getattr 会自动造属性，必须显式置 None
         mock.chat.return_value = "mock 摘要"
         # MagicMock(name=...) 的 name 是 mock 身份不是属性——工具调用消息必须 SimpleNamespace
         msg_tool = SimpleNamespace(

@@ -19,6 +19,15 @@ class Database:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
         self._init_tables()
+        # 单共享连接 + check_same_thread=False：线程池并发写时游标交错、commit
+        # 互相吞——并发冒烟实测「插入后立查返回 None」。写路径全走这把锁。
+        import threading
+        self._write_lock = threading.RLock()
+
+    def _write(self, sql: str, params: tuple = ()) -> None:
+        with self._write_lock:
+            self.conn.execute(sql, params)
+            self.conn.commit()
 
     def _init_tables(self):
         self.conn.executescript("""
@@ -68,11 +77,10 @@ class Database:
 
     def insert_document(self, filename: str, file_type: str, file_size: int, chunk_count: int) -> str:
         doc_id = _uid()
-        self.conn.execute(
+        self._write(
             "INSERT INTO documents (id, filename, file_type, file_size, chunk_count, created_at) VALUES (?,?,?,?,?,?)",
             (doc_id, filename, file_type, file_size, chunk_count, _now())
         )
-        self.conn.commit()
         return doc_id
 
     def get_document(self, doc_id: str) -> dict | None:
@@ -85,18 +93,16 @@ class Database:
         return [dict(r) for r in cur.fetchall()]
 
     def delete_document(self, doc_id: str):
-        self.conn.execute("DELETE FROM documents WHERE id=?", (doc_id,))
-        self.conn.commit()
+        self._write("DELETE FROM documents WHERE id=?", (doc_id,))
 
     # ── conversations ──
 
     def create_conversation(self, title: str = "") -> str:
         conv_id = _uid()
-        self.conn.execute(
+        self._write(
             "INSERT INTO conversations (id, title, created_at) VALUES (?,?,?)",
             (conv_id, title, _now())
         )
-        self.conn.commit()
         return conv_id
 
     def get_conversation(self, conv_id: str) -> dict | None:
@@ -122,20 +128,18 @@ class Database:
         return convs
 
     def delete_conversation(self, conv_id: str):
-        self.conn.execute("DELETE FROM agent_steps WHERE conversation_id=?", (conv_id,))
-        self.conn.execute("DELETE FROM conversations WHERE id=?", (conv_id,))
-        self.conn.commit()
+        self._write("DELETE FROM agent_steps WHERE conversation_id=?", (conv_id,))
+        self._write("DELETE FROM conversations WHERE id=?", (conv_id,))
 
     # ── agent steps ──
 
     def add_step(self, conv_id: str, step_number: int, thought: str | None,
                  tool_name: str | None, tool_input: str | None, tool_result: str | None):
-        self.conn.execute(
+        self._write(
             "INSERT INTO agent_steps (conversation_id, step_number, thought, "
             "tool_name, tool_input, tool_result, created_at) VALUES (?,?,?,?,?,?,?)",
             (conv_id, step_number, thought, tool_name, tool_input, tool_result, _now())
         )
-        self.conn.commit()
 
     def get_steps_by_conversation(self, conv_id: str) -> list[dict]:
         cur = self.conn.execute(
@@ -147,31 +151,28 @@ class Database:
     # ── memories ──
 
     def save_memory(self, key: str, value: str, source_conv_id: str | None = None):
-        self.conn.execute(
+        self._write(
             "INSERT INTO memories (key, value, source_conversation_id, created_at) VALUES (?,?,?,?)",
             (key, value, source_conv_id, _now())
         )
-        self.conn.commit()
 
     def get_memories(self) -> list[dict]:
         cur = self.conn.execute("SELECT * FROM memories ORDER BY created_at DESC")
         return [dict(r) for r in cur.fetchall()]
 
     def delete_memory(self, memory_id: int):
-        self.conn.execute("DELETE FROM memories WHERE id=?", (memory_id,))
-        self.conn.commit()
+        self._write("DELETE FROM memories WHERE id=?", (memory_id,))
 
     # ── conversation messages ──
 
     def save_conversation_messages(self, conv_id: str, messages: list[dict]):
-        self.conn.execute(
+        self._write(
             "INSERT INTO conversation_messages (conversation_id, messages_json, updated_at) "
             "VALUES (?,?,?) "
             "ON CONFLICT(conversation_id) DO UPDATE SET "
             "messages_json=excluded.messages_json, updated_at=excluded.updated_at",
             (conv_id, json.dumps(messages, ensure_ascii=False), _now())
         )
-        self.conn.commit()
 
     def get_conversation_messages(self, conv_id: str) -> list[dict]:
         cur = self.conn.execute(

@@ -1,8 +1,11 @@
 import os
 import json
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
+
+from app.services.metrics import record_usage
 
 from app.config import (
     DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL,
@@ -105,7 +108,49 @@ def ask(req: AskRequest):
     conversation_id = req.conversation_id or _db.create_conversation(req.question[:50])
     history = _db.get_conversation_messages(conversation_id) if req.conversation_id else []
 
-    answer, steps, sources = run_agent(req.question, history=history, tracer=_tracer)
+    # ── 意图识别路由层：chat 直答 / tool_research 单 agent / deep_research 多 agent ──
+    if req.force_route in ("chat", "tool_research", "deep_research"):
+        route, route_via = req.force_route, "forced"
+    else:
+        from app.services.intent_router import classify_intent
+        decision = classify_intent(req.question, history_len=len(history))
+        route, route_via = decision["intent"], decision["via"]
+
+    metrics: dict = {"route_via": route_via}
+    answer, steps, sources = "", [], []
+
+    if route == "chat":
+        start = time.time()
+        answer = _llm_service.chat([
+            {"role": "system", "content": "你是友好的对话助手，直接简洁地回答，不需要调用工具。"},
+            *[{"role": h["role"], "content": h["content"]} for h in history[-6:]],
+            {"role": "user", "content": req.question},
+        ])
+        record_usage(metrics, getattr(_llm_service, "last_usage", None))
+        metrics["latency_s"] = round(time.time() - start, 2)
+
+    elif route == "deep_research":
+        import asyncio
+        from app.api.research import _run_multi_agent
+        from app.multi_agent.schemas import TaskRequest
+
+        start = time.time()
+        result = asyncio.run(_run_multi_agent(
+            TaskRequest(task=req.question, max_iterations=2)
+        ))
+        metrics["latency_s"] = round(time.time() - start, 2)
+        metrics["iterations"] = result.iterations
+        metrics["passed"] = result.passed
+        answer = result.report
+
+    else:  # tool_research（默认兜底路径）
+        start = time.time()
+        sink: dict = {}
+        answer, steps, sources = run_agent(
+            req.question, history=history, tracer=_tracer, metrics_sink=sink
+        )
+        metrics.update(sink)
+        metrics["latency_s"] = round(time.time() - start, 2)
 
     for s in steps:
         _db.add_step(
@@ -126,12 +171,49 @@ def ask(req: AskRequest):
         steps=steps,
         sources=sources,
         conversation_id=conversation_id,
+        route=route,
+        metrics=metrics,
     )
+
+
+@app.get("/stats/{conversation_id}")
+def conversation_stats(conversation_id: str):
+    """会话级工具调用聚合：次数/成败率，数据源 agent_steps 表。"""
+    conv = _db.get_conversation(conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="对话不存在")
+
+    steps = _db.get_steps_by_conversation(conversation_id)
+    by_tool: dict[str, dict] = {}
+    total = 0
+    for s in steps:
+        if not s["tool_name"]:
+            continue  # answer 步不是工具调用
+        ok = not (s["tool_result"] or "").startswith('{"error"')
+        stats = by_tool.setdefault(s["tool_name"], {"count": 0, "success": 0, "fail": 0})
+        stats["count"] += 1
+        stats["success" if ok else "fail"] += 1
+        total += 1
+
+    fail = sum(v["fail"] for v in by_tool.values())
+    return {
+        "conversation_id": conversation_id,
+        "steps_total": len(steps),
+        "tool_calls_total": total,
+        "tool_success_rate": round((total - fail) / total, 3) if total else None,
+        "by_tool": by_tool,
+    }
 
 
 @app.post("/documents/upload", response_model=DocumentResponse)
 def upload_document(file: UploadFile = File(...)):
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    # filename 来自 multipart、用户可控：剥路径分量防穿越（与 rag-qa v2 同款加固）
+    raw_name = (file.filename or "").replace("\\", "/").strip()
+    safe_name = os.path.basename(raw_name)
+    if not safe_name or safe_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="非法文件名")
+
+    file_path = os.path.join(UPLOAD_DIR, safe_name)
 
     content = file.file.read()
     with open(file_path, "wb") as f:
@@ -141,8 +223,8 @@ def upload_document(file: UploadFile = File(...)):
     chunks = chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
 
     doc_id = _db.insert_document(
-        filename=file.filename,
-        file_type=os.path.splitext(file.filename)[1].lower(),
+        filename=safe_name,
+        file_type=os.path.splitext(safe_name)[1].lower(),
         file_size=len(content),
         chunk_count=len(chunks),
     )
@@ -150,7 +232,7 @@ def upload_document(file: UploadFile = File(...)):
     if chunks:
         embeddings = [_llm_service.embed(chunk) for chunk in chunks]
         metadatas = [
-            {"document_id": doc_id, "document_name": file.filename, "chunk_index": i}
+            {"document_id": doc_id, "document_name": safe_name, "chunk_index": i}
             for i in range(len(chunks))
         ]
         chunk_ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
