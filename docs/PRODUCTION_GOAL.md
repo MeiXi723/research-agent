@@ -20,8 +20,9 @@
 |---|---|---|
 | 真实基准数据入库 | ✅ HotpotQA 30（段落+supporting_facts gold）/2Wiki 30/MuSiQue 30（pos_doc 段落）经镜像+rows API 双通道拉取 | ✅ |
 | 真实检索评测 | answer-recall@5 ≥0.75（真实 bge 嵌入，段落感知切块） | ✅ **hotpotqa 93.3% / 2wiki 83.3% / musique 100%（均值 92.2%）**，报告 report_realdata_20261108_130511 |
-| 真实 LLM 端到端 | agent EM/F1 + v1 vs v2 对照（每套 n=10） | ⛔ **阻塞：DEEPSEEK key 401 无效** |
-| 成本计量 | 每查询 token 用量 ≤15k 预算 + 每次运行成本报告（DeepSeek 官方单价） | 代码已就绪（metrics.usage_captured），待真 key |
+| 真实 LLM 端到端 | ✅ **EM 6/10（字面）/ judge 8/10（LLM-as-judge 语义口径）**；失败项分析：1 真检索失败（sys08）+ 1 复合格（sys04），其余为字面口径误伤 | 报告 report_agent_20261108_135722 |
+| 成本计量 | ✅ **10 题合计 27,133 tokens（均值 2,713/题）**，远低于 15k/题预算门禁；token 明细逐题入库 |
+| v1 vs v2 对照 | ✅ 单跳事实题：v1 18.1s vs v2 329.9s（18 倍延迟）且 EM 持平（4/5）——**证实路由层是成本/延迟守门员**：单跳必须走 tool_research，多 agent 只服务深度任务（多跳综合报告场景另行评测） |
 | 并发稳定性 | 5 并发 /ask 无串话、无状态污染、错误率 0 | ✅ 并发冒烟全绿；**抓到并修复 SQLite 共享连接并发写竞态**（insert-then-read 返回 None）+ agent 指标 sink 覆盖路由字段两缺陷 |
 
 ## G3 生产交付形态门禁（下一步）

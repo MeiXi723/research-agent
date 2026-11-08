@@ -1,0 +1,41 @@
+{"mode": "router", "idx": 0, "question": "早上好呀", "expected": "chat", "got": "chat", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「早上好呀…」(sim=1.00)"}
+{"mode": "router", "idx": 1, "question": "你是干嘛的", "expected": "chat", "got": "chat", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「你是干嘛的…」(sim=1.00)"}
+{"mode": "router", "idx": 2, "question": "多谢多谢", "expected": "chat", "got": "chat", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「多谢多谢…」(sim=1.00)"}
+{"mode": "router", "idx": 3, "question": "睡啦", "expected": "chat", "got": "chat", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「该睡觉了…」(sim=0.76)"}
+{"mode": "router", "idx": 4, "question": "hello friend", "expected": "chat", "got": "chat", "ok": true, "via": "rule", "layer": 1, "reason": "命中寒暄短语"}
+{"mode": "router", "idx": 5, "question": "上海后天会刮风吗", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「上海后天会不会刮风…」(sim=0.97)"}
+{"mode": "router", "idx": 6, "question": "把下面这句翻成日语", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「把下面这句翻成日语…」(sim=1.00)"}
+{"mode": "router", "idx": 7, "question": "3.6 / 1.2 - 0.7 = ?", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "rule", "layer": 1, "reason": "命中计算表达式"}
+{"mode": "router", "idx": 8, "question": "python 字典合并有几种写法", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「python 字典合并有几种写法…」(sim=1.00)"}
+{"mode": "router", "idx": 9, "question": "查一下 FAISS 是干嘛的", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「查一下 FAISS 是干嘛的…」(sim=1.00)"}
+{"mode": "router", "idx": 10, "question": "搜下最近有什么 agent 框架", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「搜下最近有什么 agent 框架…」(sim=1.00)"}
+{"mode": "router", "idx": 11, "question": "一斤棉花和一斤铁哪个重，帮我算算", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「一斤棉花和一斤铁哪个重，帮我算算…」(sim=1.00)"}
+{"mode": "router", "idx": 12, "question": "这段话帮我做个词频统计", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「这段话帮我做个词频统计…」(sim=1.00)"}
+{"mode": "router", "idx": 13, "question": "帮我概括这份年报的重点", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「帮我概括这份年报的重点…」(sim=1.00)"}
+{"mode": "router", "idx": 14, "question": "A公司和B公司的估值差多少", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "rule", "layer": 1, "reason": "短疑问句走单跳工具路径"}
+{"mode": "router", "idx": 15, "question": "现在日本东京几点", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「现在日本东京几点…」(sim=1.00)"}
+{"mode": "router", "idx": 16, "question": "帮我算复合年化收益率", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「帮我算复合年化收益率…」(sim=1.00)"}
+{"mode": "router", "idx": 17, "question": "rust 和 go 哪个更适合写 cli", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「rust 和 go 哪个更适合写 cli…」(sim=1.00)"}
+{"mode": "router", "idx": 18, "question": "帮我整理一份大模型应用的研究报告", "expected": "deep_research", "got": "deep_research", "ok": true, "via": "rule", "layer": 1, "reason": "命中深度研究关键词"}
+{"mode": "router", "idx": 19, "question": "深入分析一下多智能体协作的现状", "expected": "deep_research", "got": "deep_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「深入分析一下多智能体协作的现状…」(sim=1.00)"}
+{"mode": "router", "idx": 20, "question": "给我做一份完整的竞品调研", "expected": "deep_research", "got": "deep_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「给我做一份完整的竞品调研…」(sim=1.00)"}
+{"mode": "router", "idx": 21, "question": "综述一下检索增强生成这几年的进展", "expected": "deep_research", "got": "deep_research", "ok": true, "via": "rule", "layer": 1, "reason": "命中深度研究关键词"}
+{"mode": "router", "idx": 22, "question": "全面评估三条技术路线并成文", "expected": "deep_research", "got": "deep_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「全面评估三条技术路线并成文…」(sim=1.00)"}
+{"mode": "router", "idx": 23, "question": "comprehensive research on agent tooling", "expected": "deep_research", "got": "deep_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「comprehensive research o…」(sim=1.00)"}
+{"mode": "router", "idx": 24, "question": "行业格局与趋势的系统研究", "expected": "deep_research", "got": "deep_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「行业格局与趋势的系统研究…」(sim=1.00)"}
+{"mode": "router", "idx": 25, "question": "这是不是一个该做深度调研的问题：向量库选型", "expected": "deep_research", "got": "deep_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「这是不是一个该做深度调研的问题：向量库选型…」(sim=1.00)"}
+{"mode": "router", "idx": 26, "question": "帮我看看昨天会议纪要里关于排期的部分", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「帮我看看昨天会议纪要里关于排期的部分…」(sim=1.00)"}
+{"mode": "router", "idx": 27, "question": "会话里之前聊到的方案叫什么名字", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「会话里之前聊到的方案叫什么名字…」(sim=1.00)"}
+{"mode": "router", "idx": 28, "question": "1+1", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "rule", "layer": 1, "reason": "命中计算表达式"}
+{"mode": "router", "idx": 29, "question": "帮我写一首关于秋天的短诗", "expected": "chat", "got": "chat", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「帮我写一首关于秋天的短诗…」(sim=1.00)"}
+{"mode": "router", "idx": 30, "question": "讲个冷笑话", "expected": "chat", "got": "chat", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「讲个冷笑话…」(sim=1.00)"}
+{"mode": "router", "idx": 31, "question": "你叫什么名字", "expected": "chat", "got": "chat", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「你叫什么名字…」(sim=1.00)"}
+{"mode": "router", "idx": 32, "question": "好的知道了", "expected": "chat", "got": "chat", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「好的知道了…」(sim=1.00)"}
+{"mode": "router", "idx": 33, "question": "呵呵", "expected": "chat", "got": "chat", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「呵呵…」(sim=1.00)"}
+{"mode": "router", "idx": 34, "question": "天气", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「天气…」(sim=1.00)"}
+{"mode": "router", "idx": 35, "question": "翻译：Hello world", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「翻译：Hello world…」(sim=1.00)"}
+{"mode": "router", "idx": 36, "question": "查一下今天的日期", "expected": "tool_research", "got": "tool_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「查一下今天的日期…」(sim=1.00)"}
+{"mode": "router", "idx": 37, "question": "做个关于教育大模型的市场调研报告", "expected": "deep_research", "got": "deep_research", "ok": true, "via": "rule", "layer": 1, "reason": "命中深度研究关键词"}
+{"mode": "router", "idx": 38, "question": "深度调研：本地部署 vs 云端 API 的成本", "expected": "deep_research", "got": "deep_research", "ok": true, "via": "semantic", "layer": 2, "reason": "语义命中样本「深度调研：本地部署 vs 云端 API 的成本…」(sim=1.00)"}
+{"mode": "router", "idx": 39, "question": "系统性梳理一下评测方法有哪些", "expected": "deep_research", "got": "tool_research", "ok": false, "via": "rule", "layer": 1, "reason": "短疑问句走单跳工具路径"}
+{"mode": "router", "total": 40, "accuracy": 0.975, "layer_hits": {"semantic": 32, "rule": 8}, "l12_coverage_of_all": 1.0, "l12_accuracy_when_hit": 0.975, "note": "离线口径：L3 用 fallback 计层；真 LLM 口径加 --live（未实现前以离线为准）"}

@@ -28,8 +28,10 @@ def test_l1_calc_expression():
 
 
 def test_l1_calc_regex_no_false_positive():
-    # "3个方向" 不是算式，不能被计算规则误伤
-    assert ir._rule_prefilter("3个方向分别是什么") is None
+    # "3个方向" 不是算式（calc 规则不命中）；短疑问句保护将其归入
+    # tool_research 也合理——两条规则都不能把它判成"计算表达式"
+    d = ir._rule_prefilter("3个方向分别是什么")
+    assert d is None or d["intent"] == "tool_research"
 
 
 def test_l1_smalltalk():

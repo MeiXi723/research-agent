@@ -100,15 +100,69 @@ def eval_recall(n: int | None) -> list[dict]:
 
 
 def _make_client():
-    from fastapi.testclient import TestClient
-    from app.main import app
+    """评测专用客户端：faiss/sqlite/uploads 全部指向临时目录。
 
-    return TestClient(app)
+    必须直接 patch main 模块的绑定值（lifespan 运行时才解析模块全局）——
+    旧持久化索引的嵌入维度与当前模型不一致会让 FAISS add 直接断言失败。
+    """
+    import os
+    import tempfile
+    from unittest.mock import patch
+
+    from fastapi.testclient import TestClient
+
+    tmp = tempfile.mkdtemp(prefix="eval_ragqa_")
+    ctx = [
+        patch("app.main.SQLITE_PATH", os.path.join(tmp, "eval.db")),
+        patch("app.main.UPLOAD_DIR", os.path.join(tmp, "uploads")),
+        patch("app.main.FAISS_PERSIST_DIR", os.path.join(tmp, "faiss")),
+        patch("app.main.TRACE_DIR", os.path.join(tmp, "traces")),
+    ]
+    for p_ in ctx:
+        p_.start()
+    from app.main import app
+    client = TestClient(app)
+    return client, ctx
+
+
+def _seed_corpus(client) -> int:
+    """本地金标评测前必须先灌语料——知识库为空时检索腿无料可召回。"""
+    corpus_dir = Path(__file__).parent / "corpus"
+    count = 0
+    for md in sorted(corpus_dir.glob("*.md")):
+        resp = client.post(
+            "/documents/upload",
+            files={"file": (md.stem + ".txt", md.read_bytes(), "text/plain")},  # md 不在白名单，按 txt 直读入库
+        )
+        if resp.status_code == 200:
+            count += 1
+    return count
+
+
+def judge_answer(question: str, gold: str, pred: str) -> bool | None:
+    """LLM-as-judge：语义正确性判定（字面 containment 对中文同义改写过严）。"""
+    try:
+        from app.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
+        from app.services.llm import LLMService
+        svc = LLMService(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+        prompt = (
+            "判定「AI 回答」是否在语义上正确表达了「标准答案」的要点。"
+            "允许措辞差异和格式差异，不允许编造或答非所问。\n"
+            f"问题：{question}\n标准答案：{gold}\nAI 回答：{pred[:800]}\n"
+            '只输出 JSON：{"correct": true} 或 {"correct": false}'
+        )
+        raw = svc.chat([{"role": "user", "content": prompt}], temperature=0.0)
+        data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+        return bool(data.get("correct"))
+    except Exception:
+        return None  # judge 自身故障如实标记，不假装判定
 
 
 def eval_agent(n: int | None) -> list[dict]:
-    client = _make_client()
+    client, patches = _make_client()
     with client:
+        seeded = _seed_corpus(client)
+        print(f"语料灌库: {seeded} 份")
         gold = load_gold()
         if n:
             gold = gold[:n]
@@ -118,22 +172,33 @@ def eval_agent(n: int | None) -> list[dict]:
             resp = client.post("/ask", json={"question": item["question"]})
             latency = time.time() - start
             body = resp.json()
+            m = body.get("metrics") or {}
             records.append({
                 "mode": "agent", "id": item["id"],
                 "status": resp.status_code,
+                "route": body.get("route"), "route_via": m.get("route_via"),
                 "em": em(body.get("answer", ""), item["answer"]) if resp.status_code == 200 else False,
                 "f1": f1(body.get("answer", ""), item["answer"]) if resp.status_code == 200 else 0.0,
                 "steps": len(body.get("steps", [])),
                 "latency_s": round(latency, 2),
+                "prompt_tokens": m.get("prompt_tokens", 0),
+                "completion_tokens": m.get("completion_tokens", 0),
+                "total_tokens": m.get("total_tokens", 0),
+                "tool_calls": m.get("tool_calls"),
                 "answer": body.get("answer", "")[:300],
                 "gold_answer": item["answer"],
             })
+        for r, item in zip(records, gold[:len(records)]):
+            r["judge_correct"] = judge_answer(item["question"], r["gold_answer"], r["answer"])
+        for p_ in patches:
+            p_.stop()
         return records
 
 
 def eval_compare(n: int | None) -> list[dict]:
-    client = _make_client()
+    client, patches = _make_client()
     with client:
+        _seed_corpus(client)
         gold = load_gold()
         if n:
             gold = gold[:n]
@@ -158,6 +223,8 @@ def eval_compare(n: int | None) -> list[dict]:
                        "iterations": b2.get("iterations")},
                 "gold_answer": item["answer"],
             })
+        for p_ in patches:
+            p_.stop()
         return records
 
 
@@ -255,8 +322,11 @@ def main():
     elif args.mode in ("agent", "compare"):
         if args.mode == "agent":
             ems = sum(1 for r in records if r["em"])
-            f1s = sum(r["f1"] for r in records)
-            print(f"agent: EM {ems}/{len(records)}, F1 {f1s / max(len(records), 1):.3f}")
+            judged = [r for r in records if r.get("judge_correct") is not None]
+            jc = sum(1 for r in judged if r["judge_correct"])
+            toks = sum(r.get("total_tokens", 0) for r in records)
+            print(f"agent: EM {ems}/{len(records)}, judge {jc}/{len(judged)}, "
+                  f"token 合计 {toks}, 报告含 route/token 明细")
         else:
             for side in ("v1", "v2"):
                 ems = sum(1 for r in records if r[side]["em"])

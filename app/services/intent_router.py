@@ -49,6 +49,10 @@ def _rule_prefilter(question: str) -> dict | None:
 
     if any(h in q or h in lowered for h in _DEEP_HINTS):
         return {"intent": "deep_research", "reason": "命中深度研究关键词", "via": "rule", "layer": 1}
+    # 单跳事实题保护（agent 实测教训：短疑问句被 L3 误判进 deep_research，
+    # 93s 延迟 + fallback 倾倒原文）：短问句 + 疑问词 → 一律 tool_research
+    if len(q) <= 40 and any(w in q for w in ("是什么", "多少", "哪种", "哪一层", "哪些", "谁", "吗？", "吗?", "？")):
+        return {"intent": "tool_research", "reason": "短疑问句走单跳工具路径", "via": "rule", "layer": 1}
     # 计算表达式：整串只由算术字符组成且至少含一个运算符
     # （"3个方向"含汉字必不命中；含减号的长算式 "3.6 / 1.2 - 0.7" 也能通过）
     if re.fullmatch(r"[\d\s.,+\-*/×÷%^()=？?]+", q) and any(
@@ -145,6 +149,12 @@ def _llm_classify(question: str, history_len: int) -> dict:
         data = _extract_json(raw or "")
         intent = (data or {}).get("intent")
         if intent in INTENTS:
+            # deep_research 降级复核：非显式报告意图的短问句不进多 agent（防 L3 误判）
+            if intent == "deep_research" and len(question) <= 40 and (
+                "?" in question or "？" in question
+            ):
+                return {"intent": "tool_research",
+                        "reason": "L3 判 deep 但为短问句，降级单跳", "via": "llm-guard", "layer": 3}
             return {"intent": intent, "reason": (data or {}).get("reason", ""), "via": "llm", "layer": 3}
         return {"intent": "tool_research", "reason": f"LLM 分类越界({intent})，回退默认", "via": "fallback", "layer": 3}
     except Exception as e:
