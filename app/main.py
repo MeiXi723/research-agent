@@ -1,36 +1,38 @@
 import os
-import uuid
 import json
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 
 from app.config import (
-    DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL,
+    DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL,
     FAISS_PERSIST_DIR, SQLITE_PATH, UPLOAD_DIR,
-    CHUNK_SIZE, CHUNK_OVERLAP, TOP_K, MAX_AGENT_STEPS, TAVILY_API_KEY,
-    TRACE_DIR,
+    CHUNK_SIZE, CHUNK_OVERLAP,
+    TRACE_DIR, MCP_SERVERS,
 )
 from app.db.sqlite import Database
 from app.db.vector import VectorStore
-from app.services.llm import LLMService, _llm_service
+from app.services.llm import AsyncLLMService, LLMService
 from app.services.document import parse_file, chunk_text
-from app.services.agent import run_agent
+from app.services.agent import run_agent, set_mcp_tools
+from app.services.memory import SemanticMemory, set_memory
 from app.services.tracer import Tracer
 from app.tools.search_docs import set_vector_store
 from app.models.schemas import (
-    AskRequest, AskResponse, DocumentResponse, ConversationResponse, ErrorResponse,
+    AgentStep, AskRequest, AskResponse, DocumentResponse, ConversationResponse,
 )
 
 
 _db: Database | None = None
 _vector_store: VectorStore | None = None
 _tracer: Tracer | None = None
+_mcp_manager = None
+_llm_service = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _db, _vector_store, _llm_service, _tracer
+    global _db, _vector_store, _tracer, _mcp_manager, _llm_service
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     os.makedirs(FAISS_PERSIST_DIR, exist_ok=True)
@@ -38,13 +40,39 @@ async def lifespan(app: FastAPI):
 
     _db = Database(SQLITE_PATH)
     _vector_store = VectorStore(FAISS_PERSIST_DIR, collection_name="documents")
-    _llm_service = LLMService(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
     _tracer = Tracer(TRACE_DIR)
 
     set_vector_store(_vector_store)
 
+    # ── v1 遗留 P0 修复 ──────────────────────────────────────────────────
+    # agent.py 第 7 行 `from app.services.llm import _llm_service` 是 import 时的
+    # 值绑定（当时为 None），而下面 main 自己的 global 赋值只写本模块命名空间，
+    # 两者互不相通——v1 真实运行 /ask 必然 None.chat_with_tools 崩溃，
+    # 30 个全 mock 测试从未暴露。必须在 lifespan 里逐模块回填单例。
+    import app.services.llm as llm_module
+    import app.services.agent as agent_module
+    _llm_service = LLMService(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+    llm_module._llm_service = _llm_service
+    agent_module._llm_service = _llm_service
+    llm_module._async_llm_service = AsyncLLMService(
+        api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL
+    )
+
+    set_memory(SemanticMemory(_db, embed_fn=_llm_service.embed))
+
+    # MCP stdio 子进程：启动拉起 / shutdown 终止（孤儿检测在 provider 内）
+    _mcp_manager = None
+    if MCP_SERVERS.strip():
+        from app.mcp_client.provider import MCPProviderManager, parse_servers_spec
+        _mcp_manager = MCPProviderManager(parse_servers_spec(MCP_SERVERS))
+        await _mcp_manager.start_all()
+        set_mcp_tools(_mcp_manager.get_tools())
+
     yield
 
+    if _mcp_manager:
+        await _mcp_manager.shutdown_all()
+        set_mcp_tools({})
     if _vector_store:
         _vector_store.close()
     if _db:
@@ -60,6 +88,16 @@ async def global_exception_handler(request, exc):
         status_code=500,
         content={"detail": str(exc)},
     )
+
+
+from app.api.research import router as research_router  # noqa: E402  # 多 agent 端点
+app.include_router(research_router)
+
+
+@app.get("/health")
+def health():
+    """存活探针：无鉴权零依赖，供 Docker HEALTHCHECK。"""
+    return {"status": "ok", "mcp_enabled": _mcp_manager is not None}
 
 
 @app.post("/ask", response_model=AskResponse)

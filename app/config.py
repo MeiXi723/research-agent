@@ -19,3 +19,26 @@ WINDOW_TURNS = int(os.getenv("WINDOW_TURNS", "5"))
 TRACE_DIR = os.getenv("TRACE_DIR", "./data/traces")
 MAX_LLM_RETRIES = int(os.getenv("MAX_LLM_RETRIES", "3"))
 LLM_RETRY_BASE_DELAY = float(os.getenv("LLM_RETRY_BASE_DELAY", "1.0"))
+
+# ---------------------------------------------------------------------------
+# v2.0 配置
+# ---------------------------------------------------------------------------
+#
+# LLM_TIMEOUT_SECONDS: 单次 LLM 请求超时。v1 依赖 OpenAI SDK 默认值，长思考会
+# 挂住整个 ReAct 循环；显式超时后走既有重试通道。
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+
+# AI_MOCK: 罐头响应模式（录制回放）。=1 时 chat/chat_with_tools 不发真实请求，
+# 回放 data/ai_mock/ 下的录制；E2E 冒烟在 CI 无 key 环境跑全链路就靠它。
+AI_MOCK = os.getenv("AI_MOCK", "0") == "1"
+AI_MOCK_DIR = os.getenv("AI_MOCK_DIR", "./data/ai_mock")
+
+# MCP_SERVERS: stdio 子进程 MCP server 清单，空格分隔的 name=command [args...]
+#   例：MCP_SERVERS="research=python mcp_servers/research_server.py"
+#   空值 = 不启用 MCP 层，agent 退回内置三工具（与 v1 行为一致）
+MCP_SERVERS = os.getenv("MCP_SERVERS", "")
+MCP_TOOL_TIMEOUT = float(os.getenv("MCP_TOOL_TIMEOUT", "30"))
+
+# EVAL_*: L4 评测层（opt-in）
+EVAL_DATASETS_DIR = os.getenv("EVAL_DATASETS_DIR", "./evals/datasets")
+EVAL_TOP_K = int(os.getenv("EVAL_TOP_K", "5"))

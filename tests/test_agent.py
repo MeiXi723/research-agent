@@ -77,7 +77,7 @@ def test_run_agent_with_tracer(mock_llm, tmp_path):
     run_agent("问题", tracer=tracer)
 
     with open(tracer.trace_path, "r", encoding="utf-8") as f:
-        lines = [l for l in f.read().splitlines() if l.strip()]
+        lines = [line for line in f.read().splitlines() if line.strip()]
 
     assert len(lines) == 1
     import json

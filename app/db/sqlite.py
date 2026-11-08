@@ -131,7 +131,8 @@ class Database:
     def add_step(self, conv_id: str, step_number: int, thought: str | None,
                  tool_name: str | None, tool_input: str | None, tool_result: str | None):
         self.conn.execute(
-            "INSERT INTO agent_steps (conversation_id, step_number, thought, tool_name, tool_input, tool_result, created_at) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO agent_steps (conversation_id, step_number, thought, "
+            "tool_name, tool_input, tool_result, created_at) VALUES (?,?,?,?,?,?,?)",
             (conv_id, step_number, thought, tool_name, tool_input, tool_result, _now())
         )
         self.conn.commit()
@@ -166,7 +167,8 @@ class Database:
         self.conn.execute(
             "INSERT INTO conversation_messages (conversation_id, messages_json, updated_at) "
             "VALUES (?,?,?) "
-            "ON CONFLICT(conversation_id) DO UPDATE SET messages_json=excluded.messages_json, updated_at=excluded.updated_at",
+            "ON CONFLICT(conversation_id) DO UPDATE SET "
+            "messages_json=excluded.messages_json, updated_at=excluded.updated_at",
             (conv_id, json.dumps(messages, ensure_ascii=False), _now())
         )
         self.conn.commit()
