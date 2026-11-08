@@ -22,3 +22,5 @@ select = ["E", "F", "W"]
 [tool.ruff.lint.per-file-ignores]
 # FastAPI 惯用模式：app 实例创建后再挂 router
 "app/main.py" = ["E402"]
+# evals 脚本需先把仓库根塞进 sys.path 再 import app——E402 属结构性豁免
+"evals/*.py" = ["E402"]

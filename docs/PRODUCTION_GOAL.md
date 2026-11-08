@@ -18,11 +18,11 @@
 
 | 门禁 | 目标 | 状态 |
 |---|---|---|
-| 真实基准数据入库 | HotpotQA(50)/2Wiki(30)/MuSiQue(30) 经 hf-mirror 拉取、字段校验 | 🔥 拉取中 |
-| 真实检索评测 | answer-recall@5 ≥0.75（三套基准各自报告，真实 bge 嵌入） | 🔥 本轮跑 |
+| 真实基准数据入库 | ✅ HotpotQA 30（段落+supporting_facts gold）/2Wiki 30/MuSiQue 30（pos_doc 段落）经镜像+rows API 双通道拉取 | ✅ |
+| 真实检索评测 | answer-recall@5 ≥0.75（真实 bge 嵌入，段落感知切块） | ✅ **hotpotqa 93.3% / 2wiki 83.3% / musique 100%（均值 92.2%）**，报告 report_realdata_20261108_130511 |
 | 真实 LLM 端到端 | agent EM/F1 + v1 vs v2 对照（每套 n=10） | ⛔ **阻塞：DEEPSEEK key 401 无效** |
 | 成本计量 | 每查询 token 用量 ≤15k 预算 + 每次运行成本报告（DeepSeek 官方单价） | 代码已就绪（metrics.usage_captured），待真 key |
-| 并发稳定性 | 5 并发 /ask 无串话、无状态污染、错误率 0 | 🔥 本轮跑（mock 层并发验证） |
+| 并发稳定性 | 5 并发 /ask 无串话、无状态污染、错误率 0 | ✅ 并发冒烟全绿；**抓到并修复 SQLite 共享连接并发写竞态**（insert-then-read 返回 None）+ agent 指标 sink 覆盖路由字段两缺陷 |
 
 ## G3 生产交付形态门禁（下一步）
 
@@ -33,7 +33,7 @@
 
 ## 阻塞与解法
 
-1. **DEEPSEEK key 401**（阻塞 G2 的 LLM 三项）：`.env` 里 `****33f5` 已失效。
+1. **DEEPSEEK key 401**（阻塞 G2 的 LLM 三项：agent EM/F1、v1/v2 对照、成本报告）：`.env` 里 `****33f5` 已失效。检索层/路由层/并发层的真实数据验证已在无 LLM 依赖下完成。
    换有效 key 到 `.env` 后依次跑：
    `python evals/run_eval.py --mode agent --n 10` → `--mode compare --n 5` → 并发真跑。
 2. 数据集候选 id 拉取失败不静默：pull_datasets 逐候选实测，失败降级并在 stderr 声明。

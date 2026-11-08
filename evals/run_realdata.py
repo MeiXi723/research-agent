@@ -17,6 +17,8 @@ sys_root = str(ROOT)
 if sys_root not in __import__("sys").path:
     __import__("sys").path.insert(0, sys_root)
 
+from app.services.document import chunk_text
+
 DATASETS_DIR = Path(__file__).parent / "datasets"
 REPORTS_DIR = Path(__file__).parent / "reports"
 BENCHMARKS = ["hotpotqa", "2wiki", "musique"]
@@ -34,6 +36,36 @@ def load_items(name: str, n: int | None) -> list[dict]:
     return items[:n] if n else items
 
 
+def build_blocks(item: dict) -> tuple[list[dict], set[str]]:
+    """条目 → 检索块。段落结构（paragraphs+gold_titles）优先；扁平 context 走滑窗。"""
+    gold: set[str] = set()
+    blocks: list[tuple[str, str]] = []  # (title, text)
+    if item.get("paragraphs"):
+        for p in item["paragraphs"]:
+            text = p["text"]
+            if len(text) > 800:  # 超长段落再滑窗，避免单块稀释向量
+                for i in range(0, len(text), 800):
+                    blocks.append((p["title"], text[i:i + 800]))
+            else:
+                blocks.append((p["title"], text))
+        gold = set(item.get("gold_titles") or [])
+    else:
+        for i, c in enumerate(chunk_text(item["context"], chunk_size=500, overlap=50)):
+            blocks.append((f"chunk_{i}", c))
+    titles = [b[0] for b in blocks]
+    texts = [b[1] for b in blocks]
+    return list(zip(range(len(blocks)), titles, texts)), gold
+
+
+def item_hit(item: dict, top_blocks, answer: str, gold: set[str]) -> bool:
+    for _, title, text in top_blocks:
+        if gold and title in gold:
+            return True
+        if answer and normalize(answer) in normalize(text):
+            return True
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", choices=BENCHMARKS + ["all"], default="all")
@@ -45,7 +77,6 @@ def main():
     import numpy as np
 
     from app.config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
-    from app.services.document import chunk_text
     from app.services.llm import LLMService
 
     svc = LLMService(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
@@ -72,23 +103,23 @@ def main():
             latencies = []
             for i, item in enumerate(items):
                 start = time.time()
-                chunks = chunk_text(item["context"], chunk_size=500, overlap=50)
-                if not chunks:
+                indexed, gold = build_blocks(item)
+                if not indexed:
                     continue
-                vecs = np.array([svc.embed(c) for c in chunks], dtype="float32")
+                vecs = np.array([svc.embed(t) for _, _, t in indexed], dtype="float32")
                 index = faiss.IndexFlatL2(vecs.shape[1])
                 index.add(vecs)
                 q = np.array([svc.embed(item["question"])], dtype="float32")
                 k = min(args.k, index.ntotal)
                 _, idx = index.search(q, k)
-                top_texts = [chunks[j] for j in idx[0] if 0 <= j < len(chunks)]
-                hit = any(normalize(item["answer"]) in normalize(t) for t in top_texts)
+                top_blocks = [indexed[j] for j in idx[0] if 0 <= j < len(indexed)]
+                hit = item_hit(item, top_blocks, item["answer"], gold)
                 hits += hit
                 latencies.append(time.time() - start)
                 rec = {
                     "mode": "realdata", "dataset": name, "idx": i, "hit": hit,
                     "question": item["question"][:80], "answer": item["answer"][:60],
-                    "chunks": len(chunks), "latency_s": round(latencies[-1], 2),
+                    "blocks": len(indexed), "latency_s": round(latencies[-1], 2),
                 }
                 all_records.append(rec)
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
