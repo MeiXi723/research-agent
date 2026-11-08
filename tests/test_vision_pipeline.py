@@ -134,8 +134,9 @@ def _real_llm_configured() -> bool:
     return bool(k) and not k.startswith(("sk-ci", "sk-test", "sk-placeholder"))
 
 
+@pytest.mark.skipif(not _real_llm_configured(), reason="需要真实 DEEPSEEK_API_KEY：上传即要 embedding，CI 只有占位符")
 def test_image_upload_to_retrieval_full_chain(vision_app):
-    # 1. 上传图片 → 视觉专线描述 → 入库（这一段不依赖主 LLM，CI 也验）
+    # 1. 上传图片 → 视觉专线描述 → embedding → 入库
     up = vision_app.post(
         "/documents/upload",
         files={"file": ("table.png", PNG_1PX, "image/png")},
@@ -144,12 +145,7 @@ def test_image_upload_to_retrieval_full_chain(vision_app):
     doc = up.json()
     assert doc["file_type"] == "png" and doc["chunk_count"] == 1
 
-    # 2. /ask 走的是 run_agent → chat_with_tools → 真实 LLM。
-    #    CI 只有占位符 key，打真实接口就是 401，所以这一段显式跳过而不是伪造通过。
-    if not _real_llm_configured():
-        pytest.skip("无真实 DEEPSEEK_API_KEY：上传+入库已验证，/ask 生成段跳过")
-
-    # 3. 图片描述可被语义检索命中（stub 描述含「4242」与「99 步」）
+    # 2. 图片描述可被语义检索命中（stub 描述含「4242」与「99 步」）
     ask = vision_app.post(
         "/ask",
         json={"question": "专线端口是多少？", "force_route": "tool_research"},
