@@ -105,8 +105,13 @@ app.include_router(research_router)
 
 @app.get("/health")
 def health():
-    """存活探针：无鉴权零依赖，供 Docker HEALTHCHECK。"""
-    return {"status": "ok", "mcp_enabled": _mcp_manager is not None}
+    """存活探针 + 通道健康态：无鉴权零依赖，供 Docker HEALTHCHECK 和运维查看。"""
+    vision_status = _vision_service.status() if _vision_service else {"configured": False}
+    return {
+        "status": "ok",
+        "mcp_enabled": _mcp_manager is not None,
+        "vision": vision_status,
+    }
 
 
 @app.post("/ask", response_model=AskResponse)
