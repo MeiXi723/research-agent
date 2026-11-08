@@ -187,12 +187,17 @@ def test_server_process_killed_call_does_not_hang():
         tools = manager.get_tools()
         pids = _find_server_pids()
         assert pids, "按命令行未找到 research_server 子进程"
-        kill = subprocess.run(
-            ["taskkill", "/PID", str(pids[0]), "/F", "/T"],
-            capture_output=True, text=True, timeout=30, check=False,
-            # 中文 Windows 的 taskkill 输出是 GBK（"成功: 已终止..."），utf-8 严格解码会崩 reader 线程
-            encoding="utf-8", errors="replace",
-        )
+        if sys.platform == "win32":
+            kill = subprocess.run(
+                ["taskkill", "/PID", str(pids[0]), "/F", "/T"],
+                capture_output=True, text=True, timeout=30, check=False,
+                # 中文 Windows 的 taskkill 输出是 GBK（"成功: 已终止..."），utf-8 严格解码会崩 reader 线程
+                encoding="utf-8", errors="replace",
+            )
+        else:
+            import os
+            os.kill(pids[0], 9)  # SIGKILL：与 taskkill /F 语义对齐
+            kill = subprocess.CompletedProcess([], 0)
         assert kill.returncode == 0, kill.stderr
         time.sleep(0.5)  # 给管道 EOF 传播留一点时间，避免竞态假阳性
 
